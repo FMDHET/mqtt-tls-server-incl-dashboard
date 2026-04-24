@@ -31,6 +31,7 @@ import "./styles.css";
 
 const apiBase = "/api";
 const refreshIntervalMs = 15000;
+const refreshIntervalSeconds = refreshIntervalMs / 1000;
 
 function request(path, token, options = {}) {
   return fetch(`${apiBase}${path}`, {
@@ -130,6 +131,7 @@ function Dashboard({ session, onLogout }) {
   const [historyRange, setHistoryRange] = useState(() => defaultHistoryRange());
   const [historyEndsNow, setHistoryEndsNow] = useState(true);
   const [message, setMessage] = useState("");
+  const [refreshCountdown, setRefreshCountdown] = useState(refreshIntervalSeconds);
 
   const selectedDevice = devices.find((device) => device.id === selectedDeviceId) || devices[0];
   const isAdmin = user.role === "admin";
@@ -146,6 +148,7 @@ function Dashboard({ session, onLogout }) {
     if (!devicesData.devices.some((device) => device.id === selectedDeviceId)) {
       setSelectedDeviceId(devicesData.devices[0]?.id || "");
     }
+    setRefreshCountdown(refreshIntervalSeconds);
   }, [isAdmin, selectedDeviceId, token]);
 
   useEffect(() => {
@@ -155,6 +158,13 @@ function Dashboard({ session, onLogout }) {
     }, refreshIntervalMs);
     return () => window.clearInterval(interval);
   }, [load]);
+
+  useEffect(() => {
+    const interval = window.setInterval(() => {
+      setRefreshCountdown((current) => (current <= 1 ? refreshIntervalSeconds : current - 1));
+    }, 1000);
+    return () => window.clearInterval(interval);
+  }, []);
 
   useEffect(() => {
     if (!selectedDevice?.id) return;
@@ -171,6 +181,7 @@ function Dashboard({ session, onLogout }) {
         const data = await request(`/devices/${selectedDevice.id}/readings?${params.toString()}`, token);
         if (active) {
           setReadings(data.readings);
+          setRefreshCountdown(refreshIntervalSeconds);
           if (historyEndsNow) setHistoryRange((current) => ({ ...current, end: effectiveEnd }));
         }
       } catch (err) {
@@ -267,9 +278,15 @@ function Dashboard({ session, onLogout }) {
             <p className="eyebrow">Live Monitoring</p>
             <h2>{selectedDevice?.name || "Noch kein Geraet angelegt"}</h2>
           </div>
-          <div className="status-pill">
-            <Activity size={18} />
-            {selectedDevice?.last_seen_at ? `Zuletzt ${formatDate(selectedDevice.last_seen_at)}` : "Wartet auf Daten"}
+          <div className="topbar-status">
+            <div className="status-pill">
+              <Activity size={18} />
+              {selectedDevice?.last_seen_at ? `Zuletzt ${formatDate(selectedDevice.last_seen_at)}` : "Wartet auf Daten"}
+            </div>
+            <div className="status-pill refresh-pill">
+              <Clock3 size={18} />
+              Refresh in {refreshCountdown}s
+            </div>
           </div>
         </header>
 

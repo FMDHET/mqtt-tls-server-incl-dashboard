@@ -222,6 +222,21 @@ h3 {
   color: #3b4a55;
 }
 
+.topbar-status {
+  display: flex;
+  align-items: center;
+  justify-content: flex-end;
+  flex-wrap: wrap;
+  gap: 10px;
+}
+
+.refresh-pill {
+  color: #0b6f72;
+  background: #e4f4f2;
+  border-color: #cfe6e4;
+  font-weight: 900;
+}
+
 .kpi-grid {
   display: grid;
   grid-template-columns: repeat(5, minmax(150px, 1fr));
@@ -592,6 +607,12 @@ h3 {
   .section-heading {
     align-items: flex-start;
     flex-direction: column;
+  }
+
+  .topbar-status {
+    align-items: stretch;
+    justify-content: flex-start;
+    width: 100%;
   }
 
   .multi-select {
