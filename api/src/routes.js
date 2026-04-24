@@ -46,6 +46,38 @@ router.post("/users", requireAuth, requireAdmin, async (req, res) => {
   res.status(201).json({ user: result.rows[0] });
 });
 
+router.patch("/users/:id", requireAuth, requireAdmin, async (req, res) => {
+  const { email, name, password, role } = req.body || {};
+  if (role && !["admin", "user"].includes(role)) return res.status(400).json({ error: "Ungueltige Rolle" });
+  if (!email && !name && !password && !role) return res.status(400).json({ error: "Keine Aenderung angegeben" });
+
+  const current = await pool.query("select * from users where id = $1", [req.params.id]);
+  if (current.rowCount === 0) return res.status(404).json({ error: "User nicht gefunden" });
+
+  if (req.params.id === req.user.id && role && role !== "admin") {
+    return res.status(400).json({ error: "Eigenen Admin nicht herabstufen" });
+  }
+
+  const hash = password ? await bcrypt.hash(password, 12) : null;
+  const result = await pool.query(
+    `update users
+     set email = coalesce($2, email),
+         name = coalesce($3, name),
+         role = coalesce($4, role),
+         password_hash = coalesce($5, password_hash)
+     where id = $1
+     returning id, email, name, role, created_at`,
+    [
+      req.params.id,
+      email ? String(email).toLowerCase() : null,
+      name || null,
+      role || null,
+      hash
+    ]
+  );
+  res.json({ user: result.rows[0] });
+});
+
 router.delete("/users/:id", requireAuth, requireAdmin, async (req, res) => {
   if (req.params.id === req.user.id) return res.status(400).json({ error: "Eigenen Admin nicht loeschen" });
   await pool.query("delete from users where id = $1", [req.params.id]);
@@ -87,20 +119,69 @@ router.post("/devices", requireAuth, requireAdmin, async (req, res) => {
 });
 
 router.patch("/devices/:id", requireAuth, requireAdmin, async (req, res) => {
-  const { user_id, name, mqtt_password } = req.body || {};
+  const {
+    user_id,
+    name,
+    client_id,
+    serial_number,
+    mqtt_username,
+    mqtt_password,
+    manufacturer,
+    model
+  } = req.body || {};
   const current = await pool.query("select * from devices where id = $1", [req.params.id]);
   if (current.rowCount === 0) return res.status(404).json({ error: "Geraet nicht gefunden" });
 
-  const result = await pool.query(
-    `update devices
-     set user_id = coalesce($2, user_id),
-         name = coalesce($3, name)
-     where id = $1
-     returning *`,
-    [req.params.id, user_id || null, name || null]
+  const nextUsername = mqtt_username || current.rows[0].mqtt_username;
+  const usernameTaken = await pool.query(
+    "select device_id from mqtt_credentials where username = $1 and coalesce(device_id::text, '') <> $2",
+    [nextUsername, req.params.id]
   );
-  if (mqtt_password) await upsertMqttCredential(result.rows[0].mqtt_username, mqtt_password, result.rows[0].id);
-  res.json({ device: result.rows[0] });
+  if (usernameTaken.rowCount > 0) return res.status(409).json({ error: "MQTT-Username ist bereits vergeben" });
+  if (current.rows[0].mqtt_username !== nextUsername && !mqtt_password) {
+    return res.status(400).json({ error: "Beim Aendern des MQTT-Users ist ein neues MQTT-Passwort erforderlich" });
+  }
+
+  const client = await pool.connect();
+  try {
+    await client.query("begin");
+    const result = await client.query(
+      `update devices
+       set user_id = coalesce($2, user_id),
+           name = coalesce($3, name),
+           client_id = coalesce($4, client_id),
+           serial_number = coalesce($5, serial_number),
+           mqtt_username = coalesce($6, mqtt_username),
+           manufacturer = coalesce($7, manufacturer),
+           model = coalesce($8, model)
+       where id = $1
+       returning *`,
+      [
+        req.params.id,
+        user_id || null,
+        name || null,
+        client_id || null,
+        serial_number || null,
+        nextUsername,
+        manufacturer || null,
+        model || null
+      ]
+    );
+
+    if (current.rows[0].mqtt_username !== nextUsername) {
+      await client.query("delete from mqtt_credentials where username = $1", [current.rows[0].mqtt_username]);
+    }
+    if (mqtt_password || current.rows[0].mqtt_username !== nextUsername) {
+      await upsertMqttCredential(nextUsername, mqtt_password, result.rows[0].id, client);
+    }
+    await client.query("commit");
+    res.json({ device: result.rows[0] });
+  } catch (error) {
+    await client.query("rollback");
+    throw error;
+  } finally {
+    client.release();
+  }
 });
 
 router.post("/devices/claim", requireAuth, async (req, res) => {
@@ -203,10 +284,10 @@ async function visibleDevice(id, user) {
   return result.rows[0] || null;
 }
 
-async function upsertMqttCredential(username, password, deviceId) {
+async function upsertMqttCredential(username, password, deviceId, db = pool) {
   const salt = crypto.randomBytes(12).toString("hex");
   const passwordHash = crypto.createHash("sha256").update(`${password}${salt}`).digest("hex");
-  await pool.query(
+  await db.query(
     `insert into mqtt_credentials (username, password_hash, salt, device_id)
      values ($1, $2, $3, $4)
      on conflict (username) do update set

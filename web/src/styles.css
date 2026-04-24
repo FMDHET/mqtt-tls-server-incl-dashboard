@@ -310,7 +310,7 @@ h3 {
   border: 1px solid #e2ebee;
   border-radius: 6px;
   display: grid;
-  grid-template-columns: 1fr 1.4fr 38px;
+  grid-template-columns: 1fr 1.4fr auto;
   align-items: center;
   gap: 10px;
   padding: 8px 10px;
@@ -321,7 +321,16 @@ h3 {
   overflow-wrap: anywhere;
 }
 
-.list-row button {
+.row-actions,
+.edit-actions {
+  display: flex;
+  align-items: center;
+  justify-content: flex-end;
+  gap: 8px;
+}
+
+.list-row button,
+.edit-actions button {
   width: 34px;
   height: 34px;
   border: 0;
@@ -330,6 +339,38 @@ h3 {
   place-items: center;
   color: #a02d3f;
   background: #fae9ec;
+}
+
+.list-row .edit-button {
+  color: #0b6f72;
+  background: #e4f4f2;
+}
+
+.edit-actions .save-button {
+  color: #ffffff;
+  background: #0f8b8d;
+}
+
+.edit-actions .cancel-button {
+  color: #3b4a55;
+  background: #eef4f5;
+}
+
+.list-edit {
+  grid-column: 1 / -1;
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr)) auto;
+  gap: 8px;
+  align-items: center;
+  width: 100%;
+}
+
+.list-edit.device-edit {
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+}
+
+.list-edit.device-edit .edit-actions {
+  grid-column: 1 / -1;
 }
 
 @media (max-width: 1080px) {
@@ -391,5 +432,19 @@ h3 {
   .list-row small {
     grid-column: 1 / -1;
     grid-row: 2;
+  }
+
+  .row-actions {
+    grid-row: 1;
+    grid-column: 2;
+  }
+
+  .list-edit,
+  .list-edit.device-edit {
+    grid-template-columns: 1fr;
+  }
+
+  .list-edit.device-edit .edit-actions {
+    grid-column: auto;
   }
 }

@@ -4,12 +4,15 @@ import {
   Activity,
   Bolt,
   Clock3,
+  Pencil,
   Gauge,
   LogOut,
   Plus,
+  Save,
   Server,
   Shield,
   Trash2,
+  X,
   UserPlus,
   Users
 } from "lucide-react";
@@ -305,6 +308,7 @@ function MetricTile({ icon, label, row }) {
 
 function AdminPanel({ token, users, devices, onChanged }) {
   const [userForm, setUserForm] = useState({ name: "", email: "", password: "", role: "user" });
+  const [editingUser, setEditingUser] = useState(null);
   const [deviceForm, setDeviceForm] = useState({
     user_id: "",
     name: "Einspeisepunkt",
@@ -315,6 +319,7 @@ function AdminPanel({ token, users, devices, onChanged }) {
     manufacturer: "Eltako",
     model: "DSZ15DZMOD"
   });
+  const [editingDevice, setEditingDevice] = useState(null);
   const [error, setError] = useState("");
 
   async function createUser(event) {
@@ -345,6 +350,34 @@ function AdminPanel({ token, users, devices, onChanged }) {
     onChanged();
   }
 
+  async function updateUser(event) {
+    event.preventDefault();
+    setError("");
+    try {
+      const body = { ...editingUser };
+      if (!body.password) delete body.password;
+      await request(`/users/${editingUser.id}`, token, { method: "PATCH", body: JSON.stringify(body) });
+      setEditingUser(null);
+      onChanged();
+    } catch (err) {
+      setError(err.message);
+    }
+  }
+
+  async function updateDevice(event) {
+    event.preventDefault();
+    setError("");
+    try {
+      const body = { ...editingDevice };
+      if (!body.mqtt_password) delete body.mqtt_password;
+      await request(`/devices/${editingDevice.id}`, token, { method: "PATCH", body: JSON.stringify(body) });
+      setEditingDevice(null);
+      onChanged();
+    } catch (err) {
+      setError(err.message);
+    }
+  }
+
   return (
     <section className="admin-grid">
       <div className="admin-panel">
@@ -365,12 +398,32 @@ function AdminPanel({ token, users, devices, onChanged }) {
           </select>
           <button className="primary-button"><UserPlus size={18} /> Anlegen</button>
         </form>
+        {error && <p className="error">{error}</p>}
         <List rows={users} render={(row) => (
-          <>
-            <span>{row.name}</span>
-            <small>{row.email} · {row.role}</small>
-            <button title="Loeschen" onClick={() => remove(`/users/${row.id}`)}><Trash2 size={16} /></button>
-          </>
+          editingUser?.id === row.id ? (
+            <form className="list-edit" onSubmit={updateUser}>
+              <input value={editingUser.name} onChange={(event) => setEditingUser({ ...editingUser, name: event.target.value })} />
+              <input value={editingUser.email} onChange={(event) => setEditingUser({ ...editingUser, email: event.target.value })} />
+              <input placeholder="Neues Passwort optional" type="password" value={editingUser.password} onChange={(event) => setEditingUser({ ...editingUser, password: event.target.value })} />
+              <select value={editingUser.role} onChange={(event) => setEditingUser({ ...editingUser, role: event.target.value })}>
+                <option value="user">User</option>
+                <option value="admin">Admin</option>
+              </select>
+              <div className="edit-actions">
+                <button className="save-button" title="Speichern"><Save size={16} /></button>
+                <button className="cancel-button" type="button" title="Abbrechen" onClick={() => setEditingUser(null)}><X size={16} /></button>
+              </div>
+            </form>
+          ) : (
+            <>
+              <span>{row.name}</span>
+              <small>{row.email} · {row.role}</small>
+              <div className="row-actions">
+                <button className="edit-button" title="Bearbeiten" onClick={() => setEditingUser({ ...row, password: "" })}><Pencil size={16} /></button>
+                <button title="Loeschen" onClick={() => remove(`/users/${row.id}`)}><Trash2 size={16} /></button>
+              </div>
+            </>
+          )
         )} />
       </div>
 
@@ -398,11 +451,33 @@ function AdminPanel({ token, users, devices, onChanged }) {
         </form>
         {error && <p className="error">{error}</p>}
         <List rows={devices} render={(row) => (
-          <>
-            <span>{row.name}</span>
-            <small>{row.client_id}/devices/{row.serial_number} · MQTT {row.mqtt_username} · {row.user_email}</small>
-            <button title="Loeschen" onClick={() => remove(`/devices/${row.id}`)}><Trash2 size={16} /></button>
-          </>
+          editingDevice?.id === row.id ? (
+            <form className="list-edit device-edit" onSubmit={updateDevice}>
+              <select value={editingDevice.user_id} onChange={(event) => setEditingDevice({ ...editingDevice, user_id: event.target.value })}>
+                {users.map((user) => <option key={user.id} value={user.id}>{user.name}</option>)}
+              </select>
+              <input value={editingDevice.name} onChange={(event) => setEditingDevice({ ...editingDevice, name: event.target.value })} />
+              <input value={editingDevice.client_id} onChange={(event) => setEditingDevice({ ...editingDevice, client_id: event.target.value })} />
+              <input value={editingDevice.serial_number} onChange={(event) => setEditingDevice({ ...editingDevice, serial_number: event.target.value })} />
+              <input value={editingDevice.mqtt_username} onChange={(event) => setEditingDevice({ ...editingDevice, mqtt_username: event.target.value })} />
+              <input placeholder="Neues MQTT-Passwort optional" type="password" value={editingDevice.mqtt_password} onChange={(event) => setEditingDevice({ ...editingDevice, mqtt_password: event.target.value })} />
+              <input value={editingDevice.manufacturer || ""} onChange={(event) => setEditingDevice({ ...editingDevice, manufacturer: event.target.value })} />
+              <input value={editingDevice.model || ""} onChange={(event) => setEditingDevice({ ...editingDevice, model: event.target.value })} />
+              <div className="edit-actions">
+                <button className="save-button" title="Speichern"><Save size={16} /></button>
+                <button className="cancel-button" type="button" title="Abbrechen" onClick={() => setEditingDevice(null)}><X size={16} /></button>
+              </div>
+            </form>
+          ) : (
+            <>
+              <span>{row.name}</span>
+              <small>{row.client_id}/devices/{row.serial_number} · MQTT {row.mqtt_username} · {row.user_email}</small>
+              <div className="row-actions">
+                <button className="edit-button" title="Bearbeiten" onClick={() => setEditingDevice({ ...row, mqtt_password: "" })}><Pencil size={16} /></button>
+                <button title="Loeschen" onClick={() => remove(`/devices/${row.id}`)}><Trash2 size={16} /></button>
+              </div>
+            </>
+          )
         )} />
       </div>
     </section>
