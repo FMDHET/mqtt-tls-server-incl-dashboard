@@ -310,7 +310,7 @@ function Dashboard({ session, onLogout }) {
               <span>Sek.</span>
               <input
                 type="number"
-                min="5"
+                min="1"
                 max="300"
                 step="1"
                 value={refreshSeconds}
@@ -817,7 +817,7 @@ function formatDate(value) {
 function clampRefreshSeconds(value) {
   const parsed = Number(value);
   if (!Number.isFinite(parsed)) return defaultRefreshSeconds;
-  return Math.min(Math.max(Math.round(parsed), 5), 300);
+  return Math.min(Math.max(Math.round(parsed), 1), 300);
 }
 
 function formatChartTick(value, range) {
