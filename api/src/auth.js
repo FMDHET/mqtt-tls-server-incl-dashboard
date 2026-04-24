@@ -31,14 +31,16 @@ export async function ensureMqttIngestCredential() {
   const password = process.env.MQTT_PASSWORD;
   if (!username || !password) return;
 
-  const existing = await pool.query("select username from mqtt_credentials where username = $1", [username]);
-  if (existing.rowCount > 0) return;
-
   const salt = crypto.randomBytes(12).toString("hex");
   const passwordHash = crypto.createHash("sha256").update(`${password}${salt}`).digest("hex");
   await pool.query(
     `insert into mqtt_credentials (username, password_hash, salt, is_superuser, enabled)
-     values ($1, $2, $3, true, true)`,
+     values ($1, $2, $3, true, true)
+     on conflict (username) do update set
+      password_hash = excluded.password_hash,
+      salt = excluded.salt,
+      is_superuser = true,
+      enabled = true`,
     [username, passwordHash, salt]
   );
 }
