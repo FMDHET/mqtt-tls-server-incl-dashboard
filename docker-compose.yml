@@ -1,0 +1,129 @@
+services:
+  caddy:
+    image: caddy:2.8-alpine
+    restart: unless-stopped
+    depends_on:
+      - api
+      - web
+    ports:
+      - "80:80"
+      - "443:443"
+      - "8080:80"
+    environment:
+      CADDY_DOMAIN: ${CADDY_DOMAIN:-localhost}
+      CADDY_EMAIL: ${CADDY_EMAIL:-admin@example.com}
+    volumes:
+      - ./deploy/Caddyfile:/etc/caddy/Caddyfile:ro
+      - caddy_data:/data
+      - caddy_config:/config
+
+  web:
+    build:
+      context: ./web
+    restart: unless-stopped
+    depends_on:
+      - api
+
+  api:
+    build:
+      context: ./api
+    restart: unless-stopped
+    depends_on:
+      postgres:
+        condition: service_healthy
+      influxdb:
+        condition: service_healthy
+      emqx:
+        condition: service_started
+    environment:
+      NODE_ENV: production
+      PORT: 3000
+      DATABASE_URL: postgres://${POSTGRES_USER:-mqtt_dashboard}:${POSTGRES_PASSWORD:-change-me-db}@postgres:5432/${POSTGRES_DB:-mqtt_dashboard}
+      INFLUX_URL: http://influxdb:8086
+      INFLUX_TOKEN: ${INFLUX_TOKEN:-change-me-influx-token}
+      INFLUX_ORG: ${INFLUX_ORG:-thumm-lb}
+      INFLUX_BUCKET: ${INFLUX_BUCKET:-mqtt_energy}
+      JWT_SECRET: ${JWT_SECRET:-change-me-long-random-secret}
+      ADMIN_EMAIL: ${ADMIN_EMAIL:-admin@mqtt-tls.thumm-lb.de}
+      ADMIN_PASSWORD: ${ADMIN_PASSWORD:-ChangeMeNow123!}
+      MQTT_URL: ${MQTT_URL:-mqtt://emqx:1883}
+      MQTT_USERNAME: ${MQTT_USERNAME:-}
+      MQTT_PASSWORD: ${MQTT_PASSWORD:-}
+    ports:
+      - "3000:3000"
+
+  postgres:
+    image: postgres:16-alpine
+    restart: unless-stopped
+    environment:
+      POSTGRES_DB: ${POSTGRES_DB:-mqtt_dashboard}
+      POSTGRES_USER: ${POSTGRES_USER:-mqtt_dashboard}
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:-change-me-db}
+    volumes:
+      - postgres_data:/var/lib/postgresql/data
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U ${POSTGRES_USER:-mqtt_dashboard} -d ${POSTGRES_DB:-mqtt_dashboard}"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+
+  influxdb:
+    image: influxdb:2.7-alpine
+    restart: unless-stopped
+    environment:
+      DOCKER_INFLUXDB_INIT_MODE: setup
+      DOCKER_INFLUXDB_INIT_USERNAME: ${INFLUX_USERNAME:-admin}
+      DOCKER_INFLUXDB_INIT_PASSWORD: ${INFLUX_PASSWORD:-change-me-influx-admin}
+      DOCKER_INFLUXDB_INIT_ORG: ${INFLUX_ORG:-thumm-lb}
+      DOCKER_INFLUXDB_INIT_BUCKET: ${INFLUX_BUCKET:-mqtt_energy}
+      DOCKER_INFLUXDB_INIT_ADMIN_TOKEN: ${INFLUX_TOKEN:-change-me-influx-token}
+    volumes:
+      - influx_data:/var/lib/influxdb2
+      - influx_config:/etc/influxdb2
+    ports:
+      - "8086:8086"
+    healthcheck:
+      test: ["CMD", "influx", "ping"]
+      interval: 10s
+      timeout: 5s
+      retries: 10
+
+  emqx:
+    image: emqx/emqx:5.8
+    restart: unless-stopped
+    environment:
+      EMQX_NAME: emqx
+      EMQX_HOST: 127.0.0.1
+      EMQX_DASHBOARD__DEFAULT_USERNAME: ${EMQX_DASHBOARD_USER:-admin}
+      EMQX_DASHBOARD__DEFAULT_PASSWORD: ${EMQX_DASHBOARD_PASSWORD:-change-me-emqx-dashboard}
+      EMQX_AUTHENTICATION__1__MECHANISM: password_based
+      EMQX_AUTHENTICATION__1__BACKEND: postgresql
+      EMQX_AUTHENTICATION__1__ENABLE: "true"
+      EMQX_AUTHENTICATION__1__DATABASE: ${POSTGRES_DB:-mqtt_dashboard}
+      EMQX_AUTHENTICATION__1__USERNAME: ${POSTGRES_USER:-mqtt_dashboard}
+      EMQX_AUTHENTICATION__1__PASSWORD: ${POSTGRES_PASSWORD:-change-me-db}
+      EMQX_AUTHENTICATION__1__SERVER: postgres:5432
+      EMQX_AUTHENTICATION__1__QUERY: "select password_hash, salt, is_superuser from mqtt_credentials where username = $${username} and enabled = true limit 1"
+      EMQX_AUTHENTICATION__1__PASSWORD_HASH_ALGORITHM__NAME: sha256
+      EMQX_AUTHENTICATION__1__PASSWORD_HASH_ALGORITHM__SALT_POSITION: suffix
+      EMQX_LISTENERS__SSL__DEFAULT__BIND: "0.0.0.0:8883"
+      EMQX_LISTENERS__SSL__DEFAULT__SSL_OPTIONS__KEYFILE: /opt/emqx/etc/certs/privkey.pem
+      EMQX_LISTENERS__SSL__DEFAULT__SSL_OPTIONS__CERTFILE: /opt/emqx/etc/certs/fullchain.pem
+      EMQX_LISTENERS__SSL__DEFAULT__SSL_OPTIONS__VERIFY: verify_none
+    ports:
+      - "1883:1883"
+      - "8883:8883"
+      - "18083:18083"
+    volumes:
+      - emqx_data:/opt/emqx/data
+      - emqx_log:/opt/emqx/log
+      - ./deploy/emqx/certs:/opt/emqx/etc/certs:ro
+
+volumes:
+  postgres_data:
+  influx_data:
+  influx_config:
+  emqx_data:
+  emqx_log:
+  caddy_data:
+  caddy_config:
