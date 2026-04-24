@@ -148,9 +148,12 @@ async function storeReading(topic, payload) {
 
 export function startMqttIngestion() {
   const url = process.env.MQTT_URL || "mqtt://localhost:1883";
+  const username = process.env.MQTT_USERNAME || undefined;
+  const password = process.env.MQTT_PASSWORD || undefined;
+  console.log(`MQTT ingest connecting to ${url} as ${username || "anonymous"}`);
   const client = mqtt.connect(url, {
-    username: process.env.MQTT_USERNAME || undefined,
-    password: process.env.MQTT_PASSWORD || undefined,
+    username,
+    password,
     clientId: `dashboard-ingest-${Math.random().toString(16).slice(2)}`
   });
 

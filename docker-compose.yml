@@ -47,8 +47,8 @@ services:
       ADMIN_EMAIL: ${ADMIN_EMAIL:-admin@mqtt-tls.thumm-lb.de}
       ADMIN_PASSWORD: ${ADMIN_PASSWORD:-ChangeMeNow123!}
       MQTT_URL: ${MQTT_URL:-mqtt://emqx:1883}
-      MQTT_USERNAME: ${MQTT_USERNAME:-}
-      MQTT_PASSWORD: ${MQTT_PASSWORD:-}
+      MQTT_USERNAME: ${MQTT_USERNAME:-dashboard_ingest}
+      MQTT_PASSWORD: ${MQTT_PASSWORD:-change-me-dashboard-ingest}
     ports:
       - "3000:3000"
 
