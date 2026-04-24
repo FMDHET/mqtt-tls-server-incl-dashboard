@@ -32,8 +32,10 @@ function parseStateTopic(topic) {
   const parts = topic.split("/");
   const devicesIndex = parts.indexOf("devices");
   if (devicesIndex <= 0 || parts.length < devicesIndex + 3) return null;
+  const clientId = parts.slice(0, devicesIndex).join("/");
   return {
-    clientId: parts.slice(0, devicesIndex).join("/"),
+    clientId,
+    clientIdLeaf: clientId.split("/").at(-1),
     serialNumber: parts[devicesIndex + 1],
     metric: parts.slice(devicesIndex + 2).join("/")
   };
@@ -94,20 +96,35 @@ async function storeReading(topic, payload) {
     `select d.id, d.name, d.user_id, d.client_id, d.serial_number, mc.unit
      from devices d
      left join metric_configs mc on mc.device_id = d.id and mc.state_topic = $3
-     where d.client_id = $1 and d.serial_number = $2
+     where d.serial_number = $2
+       and (
+         d.client_id = $1
+         or d.client_id = $4
+         or mc.state_topic = $3
+       )
      limit 1`,
-    [parsed.clientId, parsed.serialNumber, topic]
+    [parsed.clientId, parsed.serialNumber, topic, parsed.clientIdLeaf]
   );
-  if (deviceResult.rowCount === 0) return;
+  if (deviceResult.rowCount === 0) {
+    console.warn("MQTT reading ignored: no registered device", {
+      topic,
+      clientId: parsed.clientId,
+      clientIdLeaf: parsed.clientIdLeaf,
+      serialNumber: parsed.serialNumber,
+      metric: parsed.metric
+    });
+    return;
+  }
 
   const device = deviceResult.rows[0];
+  const createdAt = parsePayloadTimestamp(payload) || new Date().toISOString();
   const reading = {
     device_id: device.id,
     metric: parsed.metric,
     value,
     unit: device.unit || payload.unit || null,
     raw_payload: payload,
-    created_at: new Date().toISOString()
+    created_at: createdAt
   };
   await writeReading({ device, metric: parsed.metric, value, unit: reading.unit, payload });
   await pool.query(
@@ -138,7 +155,10 @@ export function startMqttIngestion() {
   });
 
   client.on("connect", () => {
-    client.subscribe(["homeassistant/+/+/config", "+/devices/+/+"], { qos: 0 });
+    client.subscribe("#", { qos: 0 }, (error) => {
+      if (error) console.error("MQTT subscribe failed", error.message);
+      else console.log("MQTT ingest subscribed");
+    });
   });
 
   client.on("message", async (topic, buffer) => {
@@ -154,4 +174,10 @@ export function startMqttIngestion() {
   client.on("error", (error) => {
     console.error("MQTT connection error", error.message);
   });
+}
+
+function parsePayloadTimestamp(payload) {
+  if (!payload?.timestamp) return null;
+  const date = new Date(payload.timestamp);
+  return Number.isNaN(date.getTime()) ? null : date.toISOString();
 }

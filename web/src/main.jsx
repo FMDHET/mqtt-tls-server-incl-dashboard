@@ -458,7 +458,7 @@ function MetricGroup({ title, rows }) {
         {rows.map(({ key, label, row }) => (
           <div className="metric-row" key={key}>
             <span>{label}</span>
-            <strong>{row ? formatMetricValue(row) : "--"}</strong>
+            <strong title={row ? formatMetricValue(row) : "--"}>{row ? formatMetricValue(row) : "--"}</strong>
             <small>{row ? formatDate(row.created_at) : "keine Daten"}</small>
           </div>
         ))}

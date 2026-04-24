@@ -300,7 +300,7 @@ h3 {
 
 .metric-row {
   display: grid;
-  grid-template-columns: minmax(120px, 1fr) auto;
+  grid-template-columns: minmax(0, 1fr) minmax(84px, 34%);
   gap: 6px 12px;
   align-items: baseline;
   min-height: 42px;
@@ -320,6 +320,10 @@ h3 {
   color: #14212b;
   font-size: 1.05rem;
   text-align: right;
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
 }
 
 .metric-row small {
