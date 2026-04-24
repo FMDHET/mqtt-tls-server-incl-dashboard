@@ -353,6 +353,23 @@ h3 {
   min-height: 42px;
 }
 
+.toggle-button {
+  align-self: end;
+  min-height: 42px;
+  border: 1px solid #cbd8dd;
+  border-radius: 6px;
+  background: #eef4f5;
+  color: #243541;
+  padding: 0 12px;
+  font-weight: 900;
+}
+
+.toggle-button.active {
+  border-color: #0f8b8d;
+  background: #e4f4f2;
+  color: #0b6f72;
+}
+
 .multi-select {
   position: relative;
   width: min(360px, 100%);

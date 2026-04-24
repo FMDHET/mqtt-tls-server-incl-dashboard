@@ -127,6 +127,7 @@ function Dashboard({ session, onLogout }) {
   const [readings, setReadings] = useState([]);
   const [selectedChartMetrics, setSelectedChartMetrics] = useState([]);
   const [historyRange, setHistoryRange] = useState(() => defaultHistoryRange());
+  const [historyEndsNow, setHistoryEndsNow] = useState(true);
   const [message, setMessage] = useState("");
 
   const selectedDevice = devices.find((device) => device.id === selectedDeviceId) || devices[0];
@@ -155,12 +156,16 @@ function Dashboard({ session, onLogout }) {
     async function refreshReadings() {
       try {
         if (!historyRange.start || !historyRange.end) return;
+        const effectiveEnd = historyEndsNow ? toLocalDateTimeValue(new Date()) : historyRange.end;
         const params = new URLSearchParams({
           start: new Date(historyRange.start).toISOString(),
-          end: new Date(historyRange.end).toISOString()
+          end: new Date(effectiveEnd).toISOString()
         });
         const data = await request(`/devices/${selectedDevice.id}/readings?${params.toString()}`, token);
-        if (active) setReadings(data.readings);
+        if (active) {
+          setReadings(data.readings);
+          if (historyEndsNow) setHistoryRange((current) => ({ ...current, end: effectiveEnd }));
+        }
       } catch (err) {
         if (active) setMessage(err.message);
       }
@@ -172,7 +177,7 @@ function Dashboard({ session, onLogout }) {
       active = false;
       window.clearInterval(interval);
     };
-  }, [selectedDevice?.id, token, historyRange.start, historyRange.end]);
+  }, [selectedDevice?.id, token, historyRange.start, historyRange.end, historyEndsNow]);
 
   useEffect(() => {
     const proto = location.protocol === "https:" ? "wss" : "ws";
@@ -289,9 +294,22 @@ function Dashboard({ session, onLogout }) {
                 <input
                   type="datetime-local"
                   value={historyRange.end}
-                  onChange={(event) => setHistoryRange((current) => ({ ...current, end: event.target.value }))}
+                  onChange={(event) => {
+                    setHistoryEndsNow(false);
+                    setHistoryRange((current) => ({ ...current, end: event.target.value }));
+                  }}
                 />
               </label>
+              <button
+                className={historyEndsNow ? "toggle-button active" : "toggle-button"}
+                type="button"
+                onClick={() => {
+                  setHistoryEndsNow(true);
+                  setHistoryRange((current) => ({ ...current, end: toLocalDateTimeValue(new Date()) }));
+                }}
+              >
+                Bis jetzt
+              </button>
               <ChartMetricSelect
                 metrics={availableChartMetrics}
                 selectedMetrics={selectedChartMetrics}

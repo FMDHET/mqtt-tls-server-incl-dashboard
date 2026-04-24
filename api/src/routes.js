@@ -3,7 +3,7 @@ import crypto from "crypto";
 import express from "express";
 import { pool } from "./db.js";
 import { requireAdmin, requireAuth, signToken } from "./auth.js";
-import { queryReadings } from "./influx.js";
+import { queryLatest, queryReadings } from "./influx.js";
 
 export const router = express.Router();
 
@@ -262,7 +262,7 @@ router.get("/summary", requireAuth, async (req, res) => {
     where = "where d.user_id = $1";
   }
 
-  const result = await pool.query(
+  const devicesResult = await pool.query(
     `select
        d.id as device_id,
        d.name as device_name,
@@ -277,7 +277,20 @@ router.get("/summary", requireAuth, async (req, res) => {
      order by d.name, lr.metric`,
     params
   );
-  res.json({ summary: result.rows.filter((row) => row.metric) });
+  const rows = devicesResult.rows.filter((row) => row.metric);
+  if (rows.length > 0) return res.json({ summary: rows });
+
+  const visibleDevices = new Map(devicesResult.rows.map((row) => [row.device_id, row.device_name]));
+  const latest = await queryLatest({ userId: req.user.id, isAdmin: req.user.role === "admin" });
+  res.json({
+    summary: latest
+      .filter((row) => visibleDevices.has(row.device_id))
+      .map((row) => ({
+        ...row,
+        device_name: visibleDevices.get(row.device_id),
+        raw_payload: null
+      }))
+  });
 });
 
 async function visibleDevice(id, user) {
