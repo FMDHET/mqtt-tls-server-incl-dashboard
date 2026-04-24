@@ -73,5 +73,18 @@ export async function migrate() {
 
     create index if not exists readings_device_metric_created_idx
       on readings (device_id, metric, created_at desc);
+
+    create table if not exists latest_readings (
+      device_id uuid not null references devices(id) on delete cascade,
+      metric text not null,
+      value double precision not null,
+      unit text,
+      raw_payload jsonb,
+      created_at timestamptz not null default now(),
+      primary key (device_id, metric)
+    );
+
+    create index if not exists latest_readings_created_idx
+      on latest_readings (created_at desc);
   `);
 }

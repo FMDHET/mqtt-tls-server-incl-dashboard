@@ -3,7 +3,7 @@ import crypto from "crypto";
 import express from "express";
 import { pool } from "./db.js";
 import { requireAdmin, requireAuth, signToken } from "./auth.js";
-import { queryLatest, queryReadings } from "./influx.js";
+import { queryReadings } from "./influx.js";
 
 export const router = express.Router();
 
@@ -221,13 +221,14 @@ router.get("/devices/:id/metrics", requireAuth, async (req, res) => {
   const device = await visibleDevice(req.params.id, req.user);
   if (!device) return res.status(404).json({ error: "Geraet nicht gefunden" });
 
-  const rows = await queryReadings({ deviceId: req.params.id, hours: 24 * 30 });
-  const metrics = Array.from(new Set(rows.map((row) => row.metric))).map((metric) => ({
-    metric,
-    unit: "",
-    last_seen_at: rows.filter((row) => row.metric === metric).at(-1)?.created_at
-  }));
-  res.json({ metrics });
+  const result = await pool.query(
+    `select metric, unit, created_at as last_seen_at
+     from latest_readings
+     where device_id = $1
+     order by metric`,
+    [req.params.id]
+  );
+  res.json({ metrics: result.rows });
 });
 
 router.get("/devices/:id/readings", requireAuth, async (req, res) => {
@@ -236,6 +237,10 @@ router.get("/devices/:id/readings", requireAuth, async (req, res) => {
 
   const metric = req.query.metric;
   const hours = Math.min(Number(req.query.hours || 24), 24 * 365);
+  const start = parseDateQuery(req.query.start);
+  const end = parseDateQuery(req.query.end);
+  if (req.query.start && !start) return res.status(400).json({ error: "Startdatum ist ungueltig" });
+  if (req.query.end && !end) return res.status(400).json({ error: "Enddatum ist ungueltig" });
   const params = [req.params.id, hours];
   let metricFilter = "";
   if (metric) {
@@ -245,7 +250,7 @@ router.get("/devices/:id/readings", requireAuth, async (req, res) => {
 
   void params;
   void metricFilter;
-  const readings = await queryReadings({ deviceId: req.params.id, metric, hours });
+  const readings = await queryReadings({ deviceId: req.params.id, metric, hours, start, end });
   res.json({ readings });
 });
 
@@ -257,20 +262,22 @@ router.get("/summary", requireAuth, async (req, res) => {
     where = "where d.user_id = $1";
   }
 
-  const devices = await pool.query(
-    `select d.id as device_id, d.name as device_name
+  const result = await pool.query(
+    `select
+       d.id as device_id,
+       d.name as device_name,
+       lr.metric,
+       lr.value,
+       lr.unit,
+       lr.raw_payload,
+       lr.created_at
      from devices d
+     left join latest_readings lr on lr.device_id = d.id
      ${where}
-     order by d.name`,
+     order by d.name, lr.metric`,
     params
   );
-  const latest = await queryLatest({ userId: req.user.id, isAdmin: req.user.role === "admin" });
-  const names = new Map(devices.rows.map((device) => [device.device_id, device.device_name]));
-  res.json({
-    summary: latest
-      .filter((row) => names.has(row.device_id))
-      .map((row) => ({ ...row, device_name: names.get(row.device_id) }))
-  });
+  res.json({ summary: result.rows.filter((row) => row.metric) });
 });
 
 async function visibleDevice(id, user) {
@@ -282,6 +289,12 @@ async function visibleDevice(id, user) {
   }
   const result = await pool.query(`select * from devices where ${where}`, params);
   return result.rows[0] || null;
+}
+
+function parseDateQuery(value) {
+  if (!value) return null;
+  const date = new Date(String(value));
+  return Number.isNaN(date.getTime()) ? null : date.toISOString();
 }
 
 async function upsertMqttCredential(username, password, deviceId, db = pool) {

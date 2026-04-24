@@ -25,11 +25,14 @@ export async function writeReading({ device, metric, value, unit, payload }) {
   await writeApi.flush();
 }
 
-export async function queryReadings({ deviceId, metric, hours = 24 }) {
+export async function queryReadings({ deviceId, metric, hours = 24, start, end }) {
   const metricFilter = metric ? `|> filter(fn: (r) => r.metric == "${escapeFlux(metric)}")` : "";
+  const range = start
+    ? `|> range(start: time(v: "${escapeFlux(start)}")${end ? `, stop: time(v: "${escapeFlux(end)}")` : ""})`
+    : `|> range(start: -${Number(hours)}h)`;
   const flux = `
     from(bucket: "${escapeFlux(bucket)}")
-      |> range(start: -${Number(hours)}h)
+      ${range}
       |> filter(fn: (r) => r._measurement == "mqtt_reading")
       |> filter(fn: (r) => r.device_id == "${escapeFlux(deviceId)}")
       |> filter(fn: (r) => r._field == "value")

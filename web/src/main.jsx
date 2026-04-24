@@ -3,6 +3,7 @@ import { createRoot } from "react-dom/client";
 import {
   Activity,
   Bolt,
+  ChevronDown,
   Clock3,
   Pencil,
   Gauge,
@@ -124,7 +125,8 @@ function Dashboard({ session, onLogout }) {
   const [summary, setSummary] = useState([]);
   const [selectedDeviceId, setSelectedDeviceId] = useState("");
   const [readings, setReadings] = useState([]);
-  const [metricFilter, setMetricFilter] = useState("");
+  const [selectedChartMetrics, setSelectedChartMetrics] = useState([]);
+  const [historyRange, setHistoryRange] = useState(() => defaultHistoryRange());
   const [message, setMessage] = useState("");
 
   const selectedDevice = devices.find((device) => device.id === selectedDeviceId) || devices[0];
@@ -148,10 +150,29 @@ function Dashboard({ session, onLogout }) {
 
   useEffect(() => {
     if (!selectedDevice?.id) return;
-    request(`/devices/${selectedDevice.id}/readings?hours=24${metricFilter ? `&metric=${encodeURIComponent(metricFilter)}` : ""}`, token)
-      .then((data) => setReadings(data.readings))
-      .catch((err) => setMessage(err.message));
-  }, [selectedDevice?.id, metricFilter]);
+    let active = true;
+
+    async function refreshReadings() {
+      try {
+        if (!historyRange.start || !historyRange.end) return;
+        const params = new URLSearchParams({
+          start: new Date(historyRange.start).toISOString(),
+          end: new Date(historyRange.end).toISOString()
+        });
+        const data = await request(`/devices/${selectedDevice.id}/readings?${params.toString()}`, token);
+        if (active) setReadings(data.readings);
+      } catch (err) {
+        if (active) setMessage(err.message);
+      }
+    }
+
+    refreshReadings();
+    const interval = window.setInterval(refreshReadings, 15000);
+    return () => {
+      active = false;
+      window.clearInterval(interval);
+    };
+  }, [selectedDevice?.id, token, historyRange.start, historyRange.end]);
 
   useEffect(() => {
     const proto = location.protocol === "https:" ? "wss" : "ws";
@@ -183,8 +204,18 @@ function Dashboard({ session, onLogout }) {
 
   const chartMetrics = useMemo(() => {
     const metrics = Array.from(new Set(readings.map((reading) => reading.metric)));
-    return metricFilter ? metrics.filter((metric) => metric === metricFilter) : metrics.slice(0, 6);
-  }, [readings, metricFilter]);
+    return selectedChartMetrics.length
+      ? selectedChartMetrics.filter((metric) => metrics.includes(metric))
+      : metrics.slice(0, 6);
+  }, [readings, selectedChartMetrics]);
+
+  const availableChartMetrics = useMemo(() => {
+    const metrics = new Set([
+      ...Object.keys(latestByMetric),
+      ...readings.map((reading) => reading.metric)
+    ]);
+    return Array.from(metrics).sort((a, b) => humanMetric(a).localeCompare(humanMetric(b)));
+  }, [latestByMetric, readings]);
 
   return (
     <main className="app-shell">
@@ -232,22 +263,41 @@ function Dashboard({ session, onLogout }) {
           <MetricTile icon={<Gauge />} label="Power L1" row={latestByMetric.L1_active_power} />
           <MetricTile icon={<Gauge />} label="Power L2" row={latestByMetric.L2_active_power} />
           <MetricTile icon={<Gauge />} label="Power L3" row={latestByMetric.L3_active_power} />
-          <MetricTile icon={<Clock3 />} label="Tagesbezug" row={latestByMetric.daily_import || latestByMetric.energy_import_day} />
-          <MetricTile icon={<Bolt />} label="Einspeisung" row={latestByMetric.daily_export || latestByMetric.energy_export_day} />
+          <MetricTile icon={<Bolt />} label="Gesamtleistung" row={latestByMetric.Total_active_power} />
+          <MetricTile icon={<Clock3 />} label="Bezug total" row={latestByMetric.Total_imported_active_energy} />
         </section>
+
+        <MetricOverview latestByMetric={latestByMetric} />
 
         <section className="chart-section">
           <div className="section-heading">
             <div>
               <p className="eyebrow">History</p>
-              <h3>Letzte 24 Stunden</h3>
+              <h3>{historyRangeLabel(historyRange)}</h3>
             </div>
-            <select value={metricFilter} onChange={(event) => setMetricFilter(event.target.value)}>
-              <option value="">Alle Metriken</option>
-              {Object.keys(latestByMetric).map((metric) => (
-                <option key={metric} value={metric}>{metric}</option>
-              ))}
-            </select>
+            <div className="chart-controls">
+              <label>
+                Von
+                <input
+                  type="datetime-local"
+                  value={historyRange.start}
+                  onChange={(event) => setHistoryRange((current) => ({ ...current, start: event.target.value }))}
+                />
+              </label>
+              <label>
+                Bis
+                <input
+                  type="datetime-local"
+                  value={historyRange.end}
+                  onChange={(event) => setHistoryRange((current) => ({ ...current, end: event.target.value }))}
+                />
+              </label>
+              <ChartMetricSelect
+                metrics={availableChartMetrics}
+                selectedMetrics={selectedChartMetrics}
+                onChange={setSelectedChartMetrics}
+              />
+            </div>
           </div>
           <div className="chart-frame">
             <ResponsiveContainer width="100%" height={340}>
@@ -300,10 +350,122 @@ function MetricTile({ icon, label, row }) {
     <article className="metric-tile">
       <div className="tile-icon">{icon}</div>
       <p>{label}</p>
-      <strong>{row ? `${Number(row.value).toFixed(1)} ${row.unit || ""}` : "--"}</strong>
+      <strong>{row ? formatMetricValue(row) : "--"}</strong>
       <span>{row ? formatDate(row.created_at) : "keine Daten"}</span>
     </article>
   );
+}
+
+function ChartMetricSelect({ metrics, selectedMetrics, onChange }) {
+  function toggle(metric) {
+    onChange(selectedMetrics.includes(metric)
+      ? selectedMetrics.filter((item) => item !== metric)
+      : [...selectedMetrics, metric]);
+  }
+
+  function selectGroup(groupMetrics) {
+    onChange(groupMetrics.filter((metric) => metrics.includes(metric)));
+  }
+
+  const label = selectedMetrics.length === 0
+    ? "Standardauswahl"
+    : selectedMetrics.length === 1
+      ? humanMetric(selectedMetrics[0])
+      : `${selectedMetrics.length} Metriken`;
+
+  return (
+    <details className="multi-select">
+      <summary>
+        <span>{label}</span>
+        <ChevronDown size={18} />
+      </summary>
+      <div className="multi-select-menu">
+        <div className="quick-selects">
+          {chartQuickGroups.map((group) => (
+            <button key={group.label} type="button" onClick={() => selectGroup(group.metrics)}>
+              {group.label}
+            </button>
+          ))}
+          <button type="button" onClick={() => onChange([])}>Standard</button>
+        </div>
+        <div className="metric-options">
+          {metrics.map((metric) => (
+            <label key={metric} className="metric-option">
+              <input
+                type="checkbox"
+                checked={selectedMetrics.includes(metric)}
+                onChange={() => toggle(metric)}
+              />
+              <span>{humanMetric(metric)}</span>
+            </label>
+          ))}
+        </div>
+      </div>
+    </details>
+  );
+}
+
+function MetricOverview({ latestByMetric }) {
+  const rows = Object.values(latestByMetric);
+  const visibleMetrics = new Set(metricSections.flatMap((section) => section.metrics.map((metric) => metric.key)));
+  const otherRows = rows
+    .filter((row) => !visibleMetrics.has(row.metric))
+    .sort((a, b) => a.metric.localeCompare(b.metric));
+
+  return (
+    <section className="metric-overview">
+      {metricSections.map((section) => (
+        <MetricGroup key={section.title} title={section.title} rows={section.metrics.map((metric) => ({
+          ...metric,
+          row: latestByMetric[metric.key]
+        }))} />
+      ))}
+      {otherRows.length > 0 && (
+        <MetricGroup
+          title="Weitere Werte"
+          rows={otherRows.map((row) => ({ key: row.metric, label: humanMetric(row.metric), row }))}
+        />
+      )}
+    </section>
+  );
+}
+
+function MetricGroup({ title, rows }) {
+  return (
+    <article className="metric-group">
+      <div className="section-heading">
+        <h3>{title}</h3>
+      </div>
+      <div className="metric-list">
+        {rows.map(({ key, label, row }) => (
+          <div className="metric-row" key={key}>
+            <span>{label}</span>
+            <strong>{row ? formatMetricValue(row) : "--"}</strong>
+            <small>{row ? formatDate(row.created_at) : "keine Daten"}</small>
+          </div>
+        ))}
+      </div>
+    </article>
+  );
+}
+
+function formatMetricValue(row) {
+  const value = Number(row.value);
+  const formatted = Number.isFinite(value) ? value.toLocaleString("de-DE", {
+    maximumFractionDigits: Math.abs(value) >= 100 ? 1 : 3
+  }) : String(row.value);
+  return `${formatted}${row.unit ? ` ${normalizeUnit(row.unit)}` : ""}`;
+}
+
+function normalizeUnit(unit) {
+  return unit === "Watt" ? "W" : unit;
+}
+
+function humanMetric(metric) {
+  return metric
+    .replaceAll("_", " ")
+    .replace(/\bL([123])\b/g, "L$1")
+    .replace(/\bFW\b/g, "Firmware");
 }
 
 function AdminPanel({ token, users, devices, onChanged }) {
@@ -554,6 +716,99 @@ function formatDate(value) {
   });
 }
 
+function defaultHistoryRange() {
+  const end = new Date();
+  const start = new Date(end.getTime() - 24 * 60 * 60 * 1000);
+  return {
+    start: toLocalDateTimeValue(start),
+    end: toLocalDateTimeValue(end)
+  };
+}
+
+function toLocalDateTimeValue(date) {
+  const offset = date.getTimezoneOffset() * 60000;
+  return new Date(date.getTime() - offset).toISOString().slice(0, 16);
+}
+
+function historyRangeLabel(range) {
+  if (!range.start || !range.end) return "Zeitraum";
+  return `${formatDate(range.start)} - ${formatDate(range.end)}`;
+}
 const palette = ["#0f8b8d", "#ff6b35", "#2f52e0", "#7a5cfa", "#179a55", "#d1495b"];
+
+const metricSections = [
+  {
+    title: "Spannung",
+    metrics: [
+      { key: "Voltage_of_L1_to_N", label: "L1 gegen N" },
+      { key: "Voltage_of_L2_to_N", label: "L2 gegen N" },
+      { key: "Voltage_of_L3_to_N", label: "L3 gegen N" }
+    ]
+  },
+  {
+    title: "Strom",
+    metrics: [
+      { key: "L1_Current", label: "L1 Strom" },
+      { key: "L2_Current", label: "L2 Strom" },
+      { key: "L3_Current", label: "L3 Strom" }
+    ]
+  },
+  {
+    title: "Leistung",
+    metrics: [
+      { key: "L1_active_power", label: "L1 Wirkleistung" },
+      { key: "L2_active_power", label: "L2 Wirkleistung" },
+      { key: "L3_active_power", label: "L3 Wirkleistung" },
+      { key: "Total_active_power", label: "Gesamtwirkleistung" }
+    ]
+  },
+  {
+    title: "Leistungsfaktor",
+    metrics: [
+      { key: "L1_power_factor", label: "L1 Power Factor" },
+      { key: "L2_power_factor", label: "L2 Power Factor" },
+      { key: "L3_power_factor", label: "L3 Power Factor" },
+      { key: "Total_power_factor", label: "Gesamt Power Factor" }
+    ]
+  },
+  {
+    title: "Energie",
+    metrics: [
+      { key: "Total_imported_active_energy", label: "Bezug gesamt" },
+      { key: "Total_exported_active_energy", label: "Einspeisung gesamt" },
+      { key: "Resettable_total_imported_active_energy", label: "Bezug resettable" },
+      { key: "Resettable_total_exported_active_energy", label: "Einspeisung resettable" }
+    ]
+  },
+  {
+    title: "Geraetedaten",
+    metrics: [
+      { key: "Modbus_address", label: "Modbus Adresse" },
+      { key: "Serial_number", label: "Seriennummer" },
+      { key: "Manufacturing_code", label: "Manufacturing Code" },
+      { key: "Meter_type", label: "Zaehler Typ" },
+      { key: "FW_version", label: "Firmware Version" }
+    ]
+  }
+];
+
+const chartQuickGroups = [
+  {
+    label: "Spannung L1-L3",
+    metrics: ["Voltage_of_L1_to_N", "Voltage_of_L2_to_N", "Voltage_of_L3_to_N"]
+  },
+  {
+    label: "Strom L1-L3",
+    metrics: ["L1_Current", "L2_Current", "L3_Current"]
+  },
+  {
+    label: "Power L1-L3",
+    metrics: ["L1_active_power", "L2_active_power", "L3_active_power"]
+  },
+  {
+    label: "Energie",
+    metrics: ["Total_imported_active_energy", "Total_exported_active_energy"]
+  }
+];
 
 createRoot(document.getElementById("root")).render(<App />);

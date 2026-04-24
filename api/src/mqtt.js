@@ -110,7 +110,17 @@ async function storeReading(topic, payload) {
     created_at: new Date().toISOString()
   };
   await writeReading({ device, metric: parsed.metric, value, unit: reading.unit, payload });
-  await pool.query("update devices set last_seen_at = now() where id = $1", [device.id]);
+  await pool.query(
+    `insert into latest_readings (device_id, metric, value, unit, raw_payload, created_at)
+     values ($1, $2, $3, $4, $5, $6)
+     on conflict (device_id, metric) do update set
+      value = excluded.value,
+      unit = excluded.unit,
+      raw_payload = excluded.raw_payload,
+      created_at = excluded.created_at`,
+    [device.id, parsed.metric, value, reading.unit, payload, reading.created_at]
+  );
+  await pool.query("update devices set last_seen_at = $2 where id = $1", [device.id, reading.created_at]);
 
   broadcast({
     type: "reading",
