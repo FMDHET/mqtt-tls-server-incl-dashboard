@@ -1,4 +1,4 @@
-import React, { useEffect, useMemo, useState } from "react";
+import React, { useCallback, useEffect, useMemo, useState } from "react";
 import { createRoot } from "react-dom/client";
 import {
   Activity,
@@ -30,6 +30,7 @@ import {
 import "./styles.css";
 
 const apiBase = "/api";
+const refreshIntervalMs = 15000;
 
 function request(path, token, options = {}) {
   return fetch(`${apiBase}${path}`, {
@@ -133,7 +134,7 @@ function Dashboard({ session, onLogout }) {
   const selectedDevice = devices.find((device) => device.id === selectedDeviceId) || devices[0];
   const isAdmin = user.role === "admin";
 
-  async function load() {
+  const load = useCallback(async () => {
     const [devicesData, summaryData, usersData] = await Promise.all([
       request("/devices", token),
       request("/summary", token),
@@ -142,12 +143,18 @@ function Dashboard({ session, onLogout }) {
     setDevices(devicesData.devices);
     setSummary(summaryData.summary);
     setUsers(usersData.users);
-    if (!selectedDeviceId && devicesData.devices[0]) setSelectedDeviceId(devicesData.devices[0].id);
-  }
+    if (!devicesData.devices.some((device) => device.id === selectedDeviceId)) {
+      setSelectedDeviceId(devicesData.devices[0]?.id || "");
+    }
+  }, [isAdmin, selectedDeviceId, token]);
 
   useEffect(() => {
     load().catch((err) => setMessage(err.message));
-  }, []);
+    const interval = window.setInterval(() => {
+      load().catch((err) => setMessage(err.message));
+    }, refreshIntervalMs);
+    return () => window.clearInterval(interval);
+  }, [load]);
 
   useEffect(() => {
     if (!selectedDevice?.id) return;
@@ -172,7 +179,7 @@ function Dashboard({ session, onLogout }) {
     }
 
     refreshReadings();
-    const interval = window.setInterval(refreshReadings, 15000);
+    const interval = window.setInterval(refreshReadings, refreshIntervalMs);
     return () => {
       active = false;
       window.clearInterval(interval);
@@ -201,10 +208,14 @@ function Dashboard({ session, onLogout }) {
   const chartData = useMemo(() => {
     const grouped = new Map();
     for (const reading of readings) {
-      const key = new Date(reading.created_at).toLocaleTimeString("de-DE", { hour: "2-digit", minute: "2-digit" });
-      grouped.set(key, { ...(grouped.get(key) || { time: key }), [reading.metric]: Number(reading.value.toFixed(2)) });
+      const timestamp = new Date(reading.created_at).getTime();
+      if (!Number.isFinite(timestamp)) continue;
+      grouped.set(timestamp, {
+        ...(grouped.get(timestamp) || { timestamp }),
+        [reading.metric]: Number(reading.value.toFixed(2))
+      });
     }
-    return Array.from(grouped.values());
+    return Array.from(grouped.values()).sort((a, b) => a.timestamp - b.timestamp);
   }, [readings]);
 
   const chartMetrics = useMemo(() => {
@@ -329,9 +340,15 @@ function Dashboard({ session, onLogout }) {
                   ))}
                 </defs>
                 <CartesianGrid strokeDasharray="3 3" stroke="#d9e2e7" />
-                <XAxis dataKey="time" tick={{ fill: "#60717d", fontSize: 12 }} />
+                <XAxis
+                  dataKey="timestamp"
+                  type="number"
+                  domain={["dataMin", "dataMax"]}
+                  tickFormatter={(value) => formatChartTick(value, historyRange)}
+                  tick={{ fill: "#60717d", fontSize: 12 }}
+                />
                 <YAxis tick={{ fill: "#60717d", fontSize: 12 }} />
-                <Tooltip />
+                <Tooltip labelFormatter={(value) => formatChartTooltipLabel(value)} />
                 <Legend />
                 {chartMetrics.map((metric, index) => (
                   <Area
@@ -731,6 +748,28 @@ function formatDate(value) {
     month: "2-digit",
     hour: "2-digit",
     minute: "2-digit"
+  });
+}
+
+function formatChartTick(value, range) {
+  const date = new Date(value);
+  const start = new Date(range.start);
+  const end = new Date(range.end);
+  const spanHours = Math.abs(end.getTime() - start.getTime()) / 36e5;
+  if (spanHours > 48) {
+    return date.toLocaleDateString("de-DE", { day: "2-digit", month: "2-digit" });
+  }
+  return date.toLocaleTimeString("de-DE", { hour: "2-digit", minute: "2-digit" });
+}
+
+function formatChartTooltipLabel(value) {
+  return new Date(value).toLocaleString("de-DE", {
+    day: "2-digit",
+    month: "2-digit",
+    year: "2-digit",
+    hour: "2-digit",
+    minute: "2-digit",
+    second: "2-digit"
   });
 }
 
