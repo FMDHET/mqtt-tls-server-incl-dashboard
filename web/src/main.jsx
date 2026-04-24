@@ -31,8 +31,7 @@ import {
 import "./styles.css";
 
 const apiBase = "/api";
-const refreshIntervalMs = 15000;
-const refreshIntervalSeconds = refreshIntervalMs / 1000;
+const defaultRefreshSeconds = 15;
 
 function request(path, token, options = {}) {
   return fetch(`${apiBase}${path}`, {
@@ -132,7 +131,8 @@ function Dashboard({ session, onLogout }) {
   const [historyRange, setHistoryRange] = useState(() => defaultHistoryRange());
   const [historyEndsNow, setHistoryEndsNow] = useState(true);
   const [message, setMessage] = useState("");
-  const [refreshCountdown, setRefreshCountdown] = useState(refreshIntervalSeconds);
+  const [refreshSeconds, setRefreshSeconds] = useState(defaultRefreshSeconds);
+  const [refreshCountdown, setRefreshCountdown] = useState(defaultRefreshSeconds);
 
   const selectedDevice = devices.find((device) => device.id === selectedDeviceId) || devices[0];
   const isAdmin = user.role === "admin";
@@ -149,23 +149,23 @@ function Dashboard({ session, onLogout }) {
     if (!devicesData.devices.some((device) => device.id === selectedDeviceId)) {
       setSelectedDeviceId(devicesData.devices[0]?.id || "");
     }
-    setRefreshCountdown(refreshIntervalSeconds);
-  }, [isAdmin, selectedDeviceId, token]);
+    setRefreshCountdown(refreshSeconds);
+  }, [isAdmin, refreshSeconds, selectedDeviceId, token]);
 
   useEffect(() => {
     load().catch((err) => setMessage(err.message));
     const interval = window.setInterval(() => {
       load().catch((err) => setMessage(err.message));
-    }, refreshIntervalMs);
+    }, refreshSeconds * 1000);
     return () => window.clearInterval(interval);
-  }, [load]);
+  }, [load, refreshSeconds]);
 
   useEffect(() => {
     const interval = window.setInterval(() => {
-      setRefreshCountdown((current) => (current <= 1 ? refreshIntervalSeconds : current - 1));
+      setRefreshCountdown((current) => (current <= 1 ? refreshSeconds : current - 1));
     }, 1000);
     return () => window.clearInterval(interval);
-  }, []);
+  }, [refreshSeconds]);
 
   useEffect(() => {
     if (!selectedDevice?.id) return;
@@ -182,7 +182,7 @@ function Dashboard({ session, onLogout }) {
         const data = await request(`/devices/${selectedDevice.id}/readings?${params.toString()}`, token);
         if (active) {
           setReadings(data.readings);
-          setRefreshCountdown(refreshIntervalSeconds);
+          setRefreshCountdown(refreshSeconds);
           if (historyEndsNow) setHistoryRange((current) => ({ ...current, end: effectiveEnd }));
         }
       } catch (err) {
@@ -191,12 +191,12 @@ function Dashboard({ session, onLogout }) {
     }
 
     refreshReadings();
-    const interval = window.setInterval(refreshReadings, refreshIntervalMs);
+    const interval = window.setInterval(refreshReadings, refreshSeconds * 1000);
     return () => {
       active = false;
       window.clearInterval(interval);
     };
-  }, [selectedDevice?.id, token, historyRange.start, historyRange.end, historyEndsNow]);
+  }, [selectedDevice?.id, token, historyRange.start, historyRange.end, historyEndsNow, refreshSeconds]);
 
   useEffect(() => {
     const proto = location.protocol === "https:" ? "wss" : "ws";
@@ -306,6 +306,21 @@ function Dashboard({ session, onLogout }) {
               <Clock3 size={18} />
               Refresh in {refreshCountdown}s
             </div>
+            <label className="refresh-setting">
+              <span>Sek.</span>
+              <input
+                type="number"
+                min="5"
+                max="300"
+                step="1"
+                value={refreshSeconds}
+                onChange={(event) => {
+                  const next = clampRefreshSeconds(event.target.value);
+                  setRefreshSeconds(next);
+                  setRefreshCountdown(next);
+                }}
+              />
+            </label>
           </div>
         </header>
 
@@ -797,6 +812,12 @@ function formatDate(value) {
     hour: "2-digit",
     minute: "2-digit"
   });
+}
+
+function clampRefreshSeconds(value) {
+  const parsed = Number(value);
+  if (!Number.isFinite(parsed)) return defaultRefreshSeconds;
+  return Math.min(Math.max(Math.round(parsed), 5), 300);
 }
 
 function formatChartTick(value, range) {

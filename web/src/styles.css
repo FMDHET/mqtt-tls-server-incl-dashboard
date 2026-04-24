@@ -237,6 +237,28 @@ h3 {
   font-weight: 900;
 }
 
+.refresh-setting {
+  min-height: 38px;
+  border-radius: 999px;
+  background: #ffffff;
+  border: 1px solid #dce7ea;
+  padding: 0 8px 0 12px;
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  color: #3b4a55;
+  font-size: 0.85rem;
+  font-weight: 900;
+}
+
+.refresh-setting input {
+  width: 64px;
+  min-height: 28px;
+  border-radius: 999px;
+  padding: 0 8px;
+  text-align: center;
+}
+
 .kpi-grid {
   display: grid;
   grid-template-columns: repeat(5, minmax(150px, 1fr));
