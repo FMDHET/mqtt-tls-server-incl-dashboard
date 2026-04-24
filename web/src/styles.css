@@ -389,6 +389,26 @@ h3 {
   color: #0b6f72;
 }
 
+.export-button {
+  align-self: end;
+  min-height: 42px;
+  border: 0;
+  border-radius: 6px;
+  background: #0f8b8d;
+  color: #ffffff;
+  padding: 0 14px;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  gap: 8px;
+  font-weight: 900;
+}
+
+.export-button:disabled {
+  cursor: not-allowed;
+  opacity: 0.48;
+}
+
 .multi-select {
   position: relative;
   width: min(360px, 100%);

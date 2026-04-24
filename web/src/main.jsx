@@ -5,6 +5,7 @@ import {
   Bolt,
   ChevronDown,
   Clock3,
+  Download,
   Pencil,
   Gauge,
   LogOut,
@@ -244,6 +245,24 @@ function Dashboard({ session, onLogout }) {
     return Array.from(metrics).sort((a, b) => humanMetric(a).localeCompare(humanMetric(b)));
   }, [latestByMetric, readings]);
 
+  function exportChartCsv() {
+    const csv = buildChartCsv(chartData, chartMetrics);
+    if (!csv) {
+      setMessage("Keine Daten fuer den Export vorhanden.");
+      return;
+    }
+    const filename = [
+      "mqtt-export",
+      selectedDevice?.name || "device",
+      historyRange.start,
+      historyRange.end
+    ]
+      .filter(Boolean)
+      .join("_")
+      .replace(/[^\w.-]+/g, "-");
+    downloadTextFile(`${filename}.csv`, csv, "text/csv;charset=utf-8");
+  }
+
   return (
     <main className="app-shell">
       <aside className="sidebar">
@@ -343,6 +362,15 @@ function Dashboard({ session, onLogout }) {
                 selectedMetrics={selectedChartMetrics}
                 onChange={setSelectedChartMetrics}
               />
+              <button
+                className="export-button"
+                type="button"
+                onClick={exportChartCsv}
+                disabled={chartData.length === 0 || chartMetrics.length === 0}
+              >
+                <Download size={18} />
+                Export
+              </button>
             </div>
           </div>
           <div className="chart-frame">
@@ -800,6 +828,47 @@ function formatChartTooltipLabel(value) {
     minute: "2-digit",
     second: "2-digit"
   });
+}
+
+function buildChartCsv(chartData, metrics) {
+  if (!chartData.length || !metrics.length) return "";
+  const header = ["Zeit", ...metrics];
+  const lines = [
+    header.map(csvCell).join(";"),
+    ...chartData.map((row) => [
+      formatCsvTimestamp(row.timestamp),
+      ...metrics.map((metric) => row[metric] ?? "")
+    ].map(csvCell).join(";"))
+  ];
+  return `\uFEFF${lines.join("\n")}\n`;
+}
+
+function csvCell(value) {
+  const text = String(value ?? "");
+  return `"${text.replaceAll('"', '""')}"`;
+}
+
+function formatCsvTimestamp(value) {
+  return new Date(value).toLocaleString("de-DE", {
+    year: "numeric",
+    month: "2-digit",
+    day: "2-digit",
+    hour: "2-digit",
+    minute: "2-digit",
+    second: "2-digit"
+  });
+}
+
+function downloadTextFile(filename, content, type) {
+  const blob = new Blob([content], { type });
+  const url = URL.createObjectURL(blob);
+  const link = document.createElement("a");
+  link.href = url;
+  link.download = filename;
+  document.body.appendChild(link);
+  link.click();
+  link.remove();
+  URL.revokeObjectURL(url);
 }
 
 function defaultHistoryRange() {
