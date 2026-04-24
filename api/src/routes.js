@@ -103,16 +103,17 @@ router.get("/devices", requireAuth, async (req, res) => {
 });
 
 router.post("/devices", requireAuth, requireAdmin, async (req, res) => {
-  const { user_id, name, client_id, serial_number, manufacturer, model, mqtt_username, mqtt_password } = req.body || {};
+  const { user_id, name, client_id, serial_number, mqtt_topic, manufacturer, model, mqtt_username, mqtt_password } = req.body || {};
   if (!user_id || !name || !client_id || !serial_number || !mqtt_password) {
     return res.status(400).json({ error: "User, Name, Client-ID, Serialnumber und MQTT-Passwort sind Pflicht" });
   }
   const username = mqtt_username || `${client_id}_${serial_number}`;
+  const topic = mqtt_topic || defaultDeviceTopic(client_id, serial_number);
   const result = await pool.query(
-    `insert into devices (user_id, name, client_id, serial_number, mqtt_username, manufacturer, model)
-     values ($1, $2, $3, $4, $5, $6, $7)
+    `insert into devices (user_id, name, client_id, serial_number, mqtt_username, mqtt_topic, manufacturer, model)
+     values ($1, $2, $3, $4, $5, $6, $7, $8)
      returning *`,
-    [user_id, name, client_id, serial_number, username, manufacturer || null, model || null]
+    [user_id, name, client_id, serial_number, username, topic, manufacturer || null, model || null]
   );
   await upsertMqttCredential(username, mqtt_password, result.rows[0].id);
   res.status(201).json({ device: result.rows[0] });
@@ -124,6 +125,7 @@ router.patch("/devices/:id", requireAuth, requireAdmin, async (req, res) => {
     name,
     client_id,
     serial_number,
+    mqtt_topic,
     mqtt_username,
     mqtt_password,
     manufacturer,
@@ -152,8 +154,9 @@ router.patch("/devices/:id", requireAuth, requireAdmin, async (req, res) => {
            client_id = coalesce($4, client_id),
            serial_number = coalesce($5, serial_number),
            mqtt_username = coalesce($6, mqtt_username),
-           manufacturer = coalesce($7, manufacturer),
-           model = coalesce($8, model)
+           mqtt_topic = coalesce($7, mqtt_topic),
+           manufacturer = coalesce($8, manufacturer),
+           model = coalesce($9, model)
        where id = $1
        returning *`,
       [
@@ -163,6 +166,7 @@ router.patch("/devices/:id", requireAuth, requireAdmin, async (req, res) => {
         client_id || null,
         serial_number || null,
         nextUsername,
+        mqtt_topic || null,
         manufacturer || null,
         model || null
       ]
@@ -185,7 +189,16 @@ router.patch("/devices/:id", requireAuth, requireAdmin, async (req, res) => {
 });
 
 router.post("/devices/claim", requireAuth, async (req, res) => {
-  const { client_id, serial_number, mqtt_username, mqtt_password, name } = req.body || {};
+  const {
+    client_id,
+    serial_number,
+    mqtt_username,
+    mqtt_password,
+    name,
+    mqtt_topic,
+    manufacturer,
+    model
+  } = req.body || {};
   if (!client_id || !serial_number || !mqtt_username || !mqtt_password) {
     return res.status(400).json({ error: "Client-ID, Serialnumber, MQTT-User und MQTT-Passwort sind Pflicht" });
   }
@@ -203,10 +216,19 @@ router.post("/devices/claim", requireAuth, async (req, res) => {
   if (existing.rowCount > 0) return res.status(409).json({ error: "Dieses Geraet ist bereits registriert" });
 
   const result = await pool.query(
-    `insert into devices (user_id, name, client_id, serial_number, mqtt_username, manufacturer, model)
-     values ($1, $2, $3, $4, $5, 'Eltako', 'ZGW')
+    `insert into devices (user_id, name, client_id, serial_number, mqtt_username, mqtt_topic, manufacturer, model)
+     values ($1, $2, $3, $4, $5, $6, $7, $8)
      returning *`,
-    [req.user.id, name || "Eltako ZGW", client_id, serial_number, mqtt_username]
+    [
+      req.user.id,
+      name || "Eltako ZGW",
+      client_id,
+      serial_number,
+      mqtt_username,
+      mqtt_topic || defaultDeviceTopic(client_id, serial_number),
+      manufacturer || "Eltako",
+      model || "ZGW"
+    ]
   );
   await upsertMqttCredential(mqtt_username, mqtt_password, result.rows[0].id);
   res.status(201).json({ device: result.rows[0] });
@@ -308,6 +330,10 @@ function parseDateQuery(value) {
   if (!value) return null;
   const date = new Date(String(value));
   return Number.isNaN(date.getTime()) ? null : date.toISOString();
+}
+
+function defaultDeviceTopic(clientId, serialNumber) {
+  return `${clientId}/devices/${serialNumber}`;
 }
 
 async function upsertMqttCredential(username, password, deviceId, db = pool) {

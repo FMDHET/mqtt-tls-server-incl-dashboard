@@ -332,6 +332,7 @@ function Dashboard({ session, onLogout }) {
           <MetricTile icon={<Gauge />} label="Power L3" row={latestByMetric.L3_active_power} />
           <MetricTile icon={<Bolt />} label="Gesamtleistung" row={latestByMetric.Total_active_power} />
           <MetricTile icon={<Clock3 />} label="Bezug total" row={latestByMetric.Total_imported_active_energy} />
+          <MetricTile icon={<Clock3 />} label="Einspeisung total" row={latestByMetric.Total_exported_active_energy} />
         </section>
 
         <MetricOverview latestByMetric={latestByMetric} />
@@ -560,6 +561,13 @@ function normalizeUnit(unit) {
 }
 
 function humanMetric(metric) {
+  const labels = {
+    Total_imported_active_energy: "Imported Total Energy",
+    Total_exported_active_energy: "Exported Total Energy",
+    Resettable_total_imported_active_energy: "Resettable Imported Energy",
+    Resettable_total_exported_active_energy: "Resettable Exported Energy"
+  };
+  if (labels[metric]) return labels[metric];
   return metric
     .replaceAll("_", " ")
     .replace(/\bL([123])\b/g, "L$1")
@@ -576,6 +584,7 @@ function AdminPanel({ token, users, devices, onChanged }) {
     serial_number: "1",
     mqtt_username: "zgw16-ip-1",
     mqtt_password: "",
+    mqtt_topic: "ZGW16-IP/devices/1",
     manufacturer: "Eltako",
     model: "DSZ15DZMOD"
   });
@@ -703,6 +712,7 @@ function AdminPanel({ token, users, devices, onChanged }) {
           <input placeholder="Name" value={deviceForm.name} onChange={(event) => setDeviceForm({ ...deviceForm, name: event.target.value })} />
           <input placeholder="Client-ID" value={deviceForm.client_id} onChange={(event) => setDeviceForm({ ...deviceForm, client_id: event.target.value })} />
           <input placeholder="Serialnumber" value={deviceForm.serial_number} onChange={(event) => setDeviceForm({ ...deviceForm, serial_number: event.target.value })} />
+          <input placeholder="MQTT-Topic" value={deviceForm.mqtt_topic} onChange={(event) => setDeviceForm({ ...deviceForm, mqtt_topic: event.target.value })} />
           <input placeholder="MQTT-User" value={deviceForm.mqtt_username} onChange={(event) => setDeviceForm({ ...deviceForm, mqtt_username: event.target.value })} />
           <input placeholder="MQTT-Passwort" type="password" value={deviceForm.mqtt_password} onChange={(event) => setDeviceForm({ ...deviceForm, mqtt_password: event.target.value })} />
           <input placeholder="Hersteller" value={deviceForm.manufacturer} onChange={(event) => setDeviceForm({ ...deviceForm, manufacturer: event.target.value })} />
@@ -719,6 +729,7 @@ function AdminPanel({ token, users, devices, onChanged }) {
               <input value={editingDevice.name} onChange={(event) => setEditingDevice({ ...editingDevice, name: event.target.value })} />
               <input value={editingDevice.client_id} onChange={(event) => setEditingDevice({ ...editingDevice, client_id: event.target.value })} />
               <input value={editingDevice.serial_number} onChange={(event) => setEditingDevice({ ...editingDevice, serial_number: event.target.value })} />
+              <input value={editingDevice.mqtt_topic || ""} onChange={(event) => setEditingDevice({ ...editingDevice, mqtt_topic: event.target.value })} />
               <input value={editingDevice.mqtt_username} onChange={(event) => setEditingDevice({ ...editingDevice, mqtt_username: event.target.value })} />
               <input placeholder="Neues MQTT-Passwort optional" type="password" value={editingDevice.mqtt_password} onChange={(event) => setEditingDevice({ ...editingDevice, mqtt_password: event.target.value })} />
               <input value={editingDevice.manufacturer || ""} onChange={(event) => setEditingDevice({ ...editingDevice, manufacturer: event.target.value })} />
@@ -731,7 +742,7 @@ function AdminPanel({ token, users, devices, onChanged }) {
           ) : (
             <>
               <span>{row.name}</span>
-              <small>{row.client_id}/devices/{row.serial_number} · MQTT {row.mqtt_username} · {row.user_email}</small>
+              <small>{row.mqtt_topic || `${row.client_id}/devices/${row.serial_number}`} · MQTT {row.mqtt_username} · {row.user_email}</small>
               <div className="row-actions">
                 <button className="edit-button" title="Bearbeiten" onClick={() => setEditingDevice({ ...row, mqtt_password: "" })}><Pencil size={16} /></button>
                 <button title="Loeschen" onClick={() => remove(`/devices/${row.id}`)}><Trash2 size={16} /></button>
@@ -750,7 +761,10 @@ function ClaimDevice({ token, onChanged }) {
     client_id: "ZGW16-IP",
     serial_number: "",
     mqtt_username: "",
-    mqtt_password: ""
+    mqtt_password: "",
+    mqtt_topic: "ZGW16-IP/devices/1",
+    manufacturer: "Eltako",
+    model: "DSZ15DZMOD"
   });
   const [message, setMessage] = useState("");
 
@@ -779,8 +793,11 @@ function ClaimDevice({ token, onChanged }) {
         <input placeholder="Name" value={form.name} onChange={(event) => setForm({ ...form, name: event.target.value })} />
         <input placeholder="Client-ID" value={form.client_id} onChange={(event) => setForm({ ...form, client_id: event.target.value })} />
         <input placeholder="Serialnumber" value={form.serial_number} onChange={(event) => setForm({ ...form, serial_number: event.target.value })} />
+        <input placeholder="MQTT-Topic" value={form.mqtt_topic} onChange={(event) => setForm({ ...form, mqtt_topic: event.target.value })} />
         <input placeholder="MQTT-User" value={form.mqtt_username} onChange={(event) => setForm({ ...form, mqtt_username: event.target.value })} />
         <input placeholder="MQTT-Passwort" type="password" value={form.mqtt_password} onChange={(event) => setForm({ ...form, mqtt_password: event.target.value })} />
+        <input placeholder="Hersteller" value={form.manufacturer} onChange={(event) => setForm({ ...form, manufacturer: event.target.value })} />
+        <input placeholder="Modell" value={form.model} onChange={(event) => setForm({ ...form, model: event.target.value })} />
         <button className="primary-button"><Plus size={18} /> Zuweisen</button>
       </form>
       {message && <p className="notice">{message}</p>}
@@ -950,8 +967,8 @@ const metricSections = [
   {
     title: "Energie",
     metrics: [
-      { key: "Total_imported_active_energy", label: "Bezug gesamt" },
-      { key: "Total_exported_active_energy", label: "Einspeisung gesamt" },
+      { key: "Total_imported_active_energy", label: "Imported Total Energy" },
+      { key: "Total_exported_active_energy", label: "Exported Total Energy" },
       { key: "Resettable_total_imported_active_energy", label: "Bezug resettable" },
       { key: "Resettable_total_exported_active_energy", label: "Einspeisung resettable" }
     ]
@@ -982,7 +999,7 @@ const chartQuickGroups = [
     metrics: ["L1_active_power", "L2_active_power", "L3_active_power"]
   },
   {
-    label: "Energie",
+    label: "Imported/Exported Energy",
     metrics: ["Total_imported_active_energy", "Total_exported_active_energy"]
   }
 ];

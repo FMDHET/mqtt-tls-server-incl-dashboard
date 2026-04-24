@@ -24,6 +24,7 @@ export async function migrate() {
       client_id text not null,
       serial_number text not null,
       mqtt_username text not null unique,
+      mqtt_topic text,
       manufacturer text,
       model text,
       last_seen_at timestamptz,
@@ -32,7 +33,9 @@ export async function migrate() {
     );
 
     alter table devices add column if not exists mqtt_username text;
+    alter table devices add column if not exists mqtt_topic text;
     update devices set mqtt_username = client_id || '_' || serial_number where mqtt_username is null;
+    update devices set mqtt_topic = client_id || '/devices/' || serial_number where mqtt_topic is null;
     alter table devices alter column mqtt_username set not null;
     create unique index if not exists devices_mqtt_username_idx on devices (mqtt_username);
 
