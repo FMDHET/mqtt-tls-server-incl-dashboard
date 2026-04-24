@@ -343,9 +343,12 @@ function Dashboard({ session, onLogout }) {
                 <XAxis
                   dataKey="timestamp"
                   type="number"
+                  scale="time"
                   domain={["dataMin", "dataMax"]}
                   tickFormatter={(value) => formatChartTick(value, historyRange)}
                   tick={{ fill: "#60717d", fontSize: 12 }}
+                  minTickGap={28}
+                  interval="preserveStartEnd"
                 />
                 <YAxis tick={{ fill: "#60717d", fontSize: 12 }} />
                 <Tooltip labelFormatter={(value) => formatChartTooltipLabel(value)} />
@@ -756,8 +759,17 @@ function formatChartTick(value, range) {
   const start = new Date(range.start);
   const end = new Date(range.end);
   const spanHours = Math.abs(end.getTime() - start.getTime()) / 36e5;
+  const crossesDay = start.toDateString() !== end.toDateString();
   if (spanHours > 48) {
     return date.toLocaleDateString("de-DE", { day: "2-digit", month: "2-digit" });
+  }
+  if (crossesDay) {
+    return date.toLocaleString("de-DE", {
+      day: "2-digit",
+      month: "2-digit",
+      hour: "2-digit",
+      minute: "2-digit"
+    });
   }
   return date.toLocaleTimeString("de-DE", { hour: "2-digit", minute: "2-digit" });
 }
