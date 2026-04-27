@@ -13,6 +13,7 @@ export function attachLiveServer(server) {
 export function addLiveClient(res, user) {
   const client = { res, user };
   liveClients.add(client);
+  res.write("retry: 2000\n");
   res.write("event: connected\n");
   res.write(`data: ${JSON.stringify({ ok: true })}\n\n`);
   return () => liveClients.delete(client);

@@ -77,6 +77,21 @@ const translations = {
     untilNow: "Bis jetzt",
     metricsCount: "Metriken",
     noChartValue: "Keine Werte",
+    lineToNeutral: "L{{phase}} gegen N",
+    phaseCurrent: "L{{phase}} Strom",
+    activePower: "L{{phase}} Wirkleistung",
+    totalActivePower: "Gesamtwirkleistung",
+    powerFactor: "Leistungsfaktor",
+    totalPowerFactor: "Gesamt Power Factor",
+    importedEnergy: "Imported Total Energy",
+    exportedEnergy: "Exported Total Energy",
+    modbusAddress: "Modbus Adresse",
+    serialNumber: "Seriennummer",
+    manufacturingCode: "Manufacturing Code",
+    firmwareVersion: "Firmware Version",
+    voltageGroup: "Spannung L1-L3",
+    currentGroup: "Strom L1-L3",
+    energyGroup: "Imported/Exported Energy",
     resettableImport: "Bezug resettable",
     resettableExport: "Einspeisung resettable",
     powerDefault: "Power L1-L3"
@@ -123,6 +138,21 @@ const translations = {
     untilNow: "Until now",
     metricsCount: "Metrics",
     noChartValue: "No values",
+    lineToNeutral: "L{{phase}} to N",
+    phaseCurrent: "L{{phase}} current",
+    activePower: "L{{phase}} active power",
+    totalActivePower: "Total active power",
+    powerFactor: "Power factor",
+    totalPowerFactor: "Total power factor",
+    importedEnergy: "Imported total energy",
+    exportedEnergy: "Exported total energy",
+    modbusAddress: "Modbus address",
+    serialNumber: "Serial number",
+    manufacturingCode: "Manufacturing code",
+    firmwareVersion: "Firmware version",
+    voltageGroup: "Voltage L1-L3",
+    currentGroup: "Current L1-L3",
+    energyGroup: "Imported/exported energy",
     resettableImport: "Resettable import",
     resettableExport: "Resettable export",
     powerDefault: "Power L1-L3"
@@ -299,6 +329,10 @@ function Dashboard({ session, onLogout, language, onLanguageChange }) {
 
   useEffect(() => {
     const source = new EventSource(`${apiBase}/live?token=${encodeURIComponent(token)}`);
+    source.onopen = () => {
+      setLiveConnected(true);
+      setMessage("");
+    };
     source.addEventListener("connected", () => {
       setLiveConnected(true);
       setMessage("");
@@ -323,7 +357,7 @@ function Dashboard({ session, onLogout, language, onLanguageChange }) {
   useEffect(() => {
     if (liveConnected) return undefined;
     const interval = window.setInterval(() => {
-      load().catch((err) => setMessage(err.message));
+      load().catch((err) => console.warn("Live fallback refresh failed", err.message));
     }, defaultRefreshSeconds * 1000);
     return () => window.clearInterval(interval);
   }, [liveConnected, load]);
@@ -643,8 +677,8 @@ function ChartMetricSelect({ metrics, selectedMetrics, onChange, t }) {
       <div className="multi-select-menu">
         <div className="quick-selects">
           {chartQuickGroups.map((group) => (
-            <button key={group.label} type="button" onClick={() => selectGroup(group.metrics)}>
-              {group.label}
+            <button key={group.labelKey} type="button" onClick={() => selectGroup(group.metrics)}>
+              {t[group.labelKey]}
             </button>
           ))}
           <button type="button" onClick={() => {
@@ -1188,42 +1222,42 @@ function metricSections(t) {
   {
     title: t.voltage,
     metrics: [
-      { key: "Voltage_of_L1_to_N", label: "L1 gegen N" },
-      { key: "Voltage_of_L2_to_N", label: "L2 gegen N" },
-      { key: "Voltage_of_L3_to_N", label: "L3 gegen N" }
+      { key: "Voltage_of_L1_to_N", label: fillTemplate(t.lineToNeutral, { phase: "1" }) },
+      { key: "Voltage_of_L2_to_N", label: fillTemplate(t.lineToNeutral, { phase: "2" }) },
+      { key: "Voltage_of_L3_to_N", label: fillTemplate(t.lineToNeutral, { phase: "3" }) }
     ]
   },
   {
     title: t.current,
     metrics: [
-      { key: "L1_Current", label: "L1 Strom" },
-      { key: "L2_Current", label: "L2 Strom" },
-      { key: "L3_Current", label: "L3 Strom" }
+      { key: "L1_Current", label: fillTemplate(t.phaseCurrent, { phase: "1" }) },
+      { key: "L2_Current", label: fillTemplate(t.phaseCurrent, { phase: "2" }) },
+      { key: "L3_Current", label: fillTemplate(t.phaseCurrent, { phase: "3" }) }
     ]
   },
   {
     title: t.power,
     metrics: [
-      { key: "L1_active_power", label: "L1 Wirkleistung" },
-      { key: "L2_active_power", label: "L2 Wirkleistung" },
-      { key: "L3_active_power", label: "L3 Wirkleistung" },
-      { key: "Total_active_power", label: "Gesamtwirkleistung" }
+      { key: "L1_active_power", label: fillTemplate(t.activePower, { phase: "1" }) },
+      { key: "L2_active_power", label: fillTemplate(t.activePower, { phase: "2" }) },
+      { key: "L3_active_power", label: fillTemplate(t.activePower, { phase: "3" }) },
+      { key: "Total_active_power", label: t.totalActivePower }
     ]
   },
   {
-    title: "Leistungsfaktor",
+    title: t.powerFactor,
     metrics: [
       { key: "L1_power_factor", label: "L1 Power Factor" },
       { key: "L2_power_factor", label: "L2 Power Factor" },
       { key: "L3_power_factor", label: "L3 Power Factor" },
-      { key: "Total_power_factor", label: "Gesamt Power Factor" }
+      { key: "Total_power_factor", label: t.totalPowerFactor }
     ]
   },
   {
     title: t.energy,
     metrics: [
-      { key: "Total_imported_active_energy", label: "Imported Total Energy" },
-      { key: "Total_exported_active_energy", label: "Exported Total Energy" },
+      { key: "Total_imported_active_energy", label: t.importedEnergy },
+      { key: "Total_exported_active_energy", label: t.exportedEnergy },
       { key: "Resettable_total_imported_active_energy", label: t.resettableImport },
       { key: "Resettable_total_exported_active_energy", label: t.resettableExport }
     ]
@@ -1231,11 +1265,11 @@ function metricSections(t) {
   {
     title: t.deviceData,
     metrics: [
-      { key: "Modbus_address", label: "Modbus Adresse" },
-      { key: "Serial_number", label: "Seriennummer" },
-      { key: "Manufacturing_code", label: "Manufacturing Code" },
+      { key: "Modbus_address", label: t.modbusAddress },
+      { key: "Serial_number", label: t.serialNumber },
+      { key: "Manufacturing_code", label: t.manufacturingCode },
       { key: "Meter_type", label: t.meterType },
-      { key: "FW_version", label: "Firmware Version" }
+      { key: "FW_version", label: t.firmwareVersion }
     ]
   }
   ];
@@ -1243,19 +1277,19 @@ function metricSections(t) {
 
 const chartQuickGroups = [
   {
-    label: "Power L1-L3",
+    labelKey: "powerDefault",
     metrics: defaultChartMetrics
   },
   {
-    label: "Spannung L1-L3",
+    labelKey: "voltageGroup",
     metrics: ["Voltage_of_L1_to_N", "Voltage_of_L2_to_N", "Voltage_of_L3_to_N"]
   },
   {
-    label: "Strom L1-L3",
+    labelKey: "currentGroup",
     metrics: ["L1_Current", "L2_Current", "L3_Current"]
   },
   {
-    label: "Imported/Exported Energy",
+    labelKey: "energyGroup",
     metrics: ["Total_imported_active_energy", "Total_exported_active_energy"]
   }
 ];

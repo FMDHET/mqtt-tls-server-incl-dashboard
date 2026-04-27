@@ -28,14 +28,16 @@ router.get("/me", requireAuth, (req, res) => res.json({ user: req.user }));
 router.get("/live", async (req, res) => {
   try {
     const user = await userFromToken(String(req.query.token || ""));
+    req.socket.setTimeout(0);
     res.writeHead(200, {
       "Content-Type": "text/event-stream",
       "Cache-Control": "no-cache, no-transform",
       Connection: "keep-alive",
       "X-Accel-Buffering": "no"
     });
+    res.flushHeaders?.();
     const removeClient = addLiveClient(res, user);
-    const heartbeat = setInterval(() => res.write(": keepalive\n\n"), 25000);
+    const heartbeat = setInterval(() => res.write(": keepalive\n\n"), 10000);
     req.on("close", () => {
       clearInterval(heartbeat);
       removeClient();
