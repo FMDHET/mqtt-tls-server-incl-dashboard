@@ -54,7 +54,7 @@ export async function requireAuth(req, res, next) {
     req.user = await userFromToken(token);
     next();
   } catch {
-    res.status(401).json({ error: "Session ungueltig" });
+    res.status(401).json({ error: "Session ungültig" });
   }
 }
 

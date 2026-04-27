@@ -250,6 +250,20 @@ h3 {
   gap: 10px;
 }
 
+.language-select {
+  min-height: 38px;
+  display: flex;
+  align-items: center;
+}
+
+.language-select select {
+  width: auto;
+  min-height: 38px;
+  border-radius: 999px;
+  padding: 0 34px 0 14px;
+  font-weight: 900;
+}
+
 .kpi-grid {
   display: grid;
   grid-template-columns: repeat(6, minmax(150px, 1fr));

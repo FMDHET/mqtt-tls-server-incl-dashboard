@@ -80,7 +80,7 @@ export async function queryLatest({ userId, isAdmin }) {
 
 export async function deleteReadings({ before, deviceId }) {
   const stop = new Date(before);
-  if (Number.isNaN(stop.getTime())) throw new Error("Ungueltiges Enddatum fuer Influx-Loeschung");
+  if (Number.isNaN(stop.getTime())) throw new Error("Ungültiges Enddatum für Influx-Löschung");
 
   const predicates = ['_measurement="mqtt_reading"'];
   if (deviceId) predicates.push(`device_id="${escapePredicate(deviceId)}"`);
@@ -100,7 +100,7 @@ export async function deleteReadings({ before, deviceId }) {
 
   if (!response.ok) {
     const message = await response.text().catch(() => response.statusText);
-    throw new Error(`Influx-Loeschung fehlgeschlagen: ${message || response.statusText}`);
+    throw new Error(`Influx-Löschung fehlgeschlagen: ${message || response.statusText}`);
   }
 }
 

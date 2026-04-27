@@ -32,6 +32,104 @@ import "./styles.css";
 
 const apiBase = "/api";
 const defaultRefreshSeconds = 15;
+const defaultChartMetrics = ["L1_active_power", "L2_active_power", "L3_active_power"];
+
+const translations = {
+  de: {
+    dashboardSubtitle: "Dashboard für Eltako ZGW Messdaten",
+    logout: "Abmelden",
+    noDevice: "Noch kein Gerät angelegt",
+    lastSeen: "Zuletzt",
+    waiting: "Wartet auf Daten",
+    liveConnected: "Live verbunden",
+    liveDisconnected: "Live getrennt",
+    totalPower: "Gesamtleistung",
+    importedTotal: "Bezug total",
+    exportedTotal: "Einspeisung total",
+    noExportData: "Keine Daten für den Export vorhanden.",
+    userCreate: "User erstellen",
+    deviceRegister: "Gerät registrieren",
+    chooseUser: "User wählen",
+    delete: "Löschen",
+    maintenance: "Wartung",
+    cleanupHistory: "History bereinigen",
+    olderThanDays: "Älter als Tage",
+    device: "Gerät",
+    allDevices: "Alle Geräte",
+    wipeHistory: "Komplette History löschen",
+    deleteOldHistory: "Alte History löschen",
+    completeHistoryDeleted: "Komplette History wurde gelöscht.",
+    historyDeletedBefore: "History-Daten vor {{date}} wurden gelöscht.",
+    confirmWipe: "Komplette History für {{scope}} wirklich löschen?",
+    confirmDeleteOlder: "History-Daten für {{scope}} löschen, die älter als {{days}} Tage sind?",
+    thisDevice: "dieses Gerät",
+    allDevicesScope: "alle Geräte",
+    deviceAssigned: "Gerät wurde zugewiesen.",
+    claimDevice: "Gerät selbst zuweisen",
+    deviceData: "Gerätedaten",
+    meterType: "Zähler Typ",
+    voltage: "Spannung",
+    current: "Strom",
+    power: "Leistung",
+    energy: "Energie",
+    from: "Von",
+    to: "Bis",
+    untilNow: "Bis jetzt",
+    metricsCount: "Metriken",
+    resettableImport: "Bezug resettable",
+    resettableExport: "Einspeisung resettable",
+    powerDefault: "Power L1-L3"
+  },
+  en: {
+    dashboardSubtitle: "Dashboard for Eltako ZGW meter data",
+    logout: "Log out",
+    noDevice: "No device created yet",
+    lastSeen: "Last",
+    waiting: "Waiting for data",
+    liveConnected: "Live connected",
+    liveDisconnected: "Live disconnected",
+    totalPower: "Total power",
+    importedTotal: "Imported total",
+    exportedTotal: "Exported total",
+    noExportData: "No data available for export.",
+    userCreate: "Create user",
+    deviceRegister: "Register device",
+    chooseUser: "Choose user",
+    delete: "Delete",
+    maintenance: "Maintenance",
+    cleanupHistory: "Clean history",
+    olderThanDays: "Older than days",
+    device: "Device",
+    allDevices: "All devices",
+    wipeHistory: "Delete full history",
+    deleteOldHistory: "Delete old history",
+    completeHistoryDeleted: "Full history was deleted.",
+    historyDeletedBefore: "History data before {{date}} was deleted.",
+    confirmWipe: "Really delete the full history for {{scope}}?",
+    confirmDeleteOlder: "Delete history data for {{scope}} older than {{days}} days?",
+    thisDevice: "this device",
+    allDevicesScope: "all devices",
+    deviceAssigned: "Device was assigned.",
+    claimDevice: "Assign device yourself",
+    deviceData: "Device data",
+    meterType: "Meter type",
+    voltage: "Voltage",
+    current: "Current",
+    power: "Power",
+    energy: "Energy",
+    from: "From",
+    to: "To",
+    untilNow: "Until now",
+    metricsCount: "Metrics",
+    resettableImport: "Resettable import",
+    resettableExport: "Resettable export",
+    powerDefault: "Power L1-L3"
+  }
+};
+
+function fillTemplate(template, values) {
+  return Object.entries(values).reduce((text, [key, value]) => text.replaceAll(`{{${key}}}`, value), template);
+}
 
 function request(path, token, options = {}) {
   return fetch(`${apiBase}${path}`, {
@@ -56,6 +154,7 @@ function App() {
     const raw = localStorage.getItem("mqtt-dashboard-session");
     return raw ? JSON.parse(raw) : null;
   });
+  const [language, setLanguage] = useState(() => localStorage.getItem("mqtt-dashboard-language") || "de");
 
   function saveSession(next) {
     setSession(next);
@@ -63,11 +162,17 @@ function App() {
     else localStorage.removeItem("mqtt-dashboard-session");
   }
 
-  if (!session) return <Login onLogin={saveSession} />;
-  return <Dashboard session={session} onLogout={() => saveSession(null)} />;
+  function saveLanguage(next) {
+    setLanguage(next);
+    localStorage.setItem("mqtt-dashboard-language", next);
+  }
+
+  if (!session) return <Login onLogin={saveSession} language={language} />;
+  return <Dashboard session={session} onLogout={() => saveSession(null)} language={language} onLanguageChange={saveLanguage} />;
 }
 
-function Login({ onLogin }) {
+function Login({ onLogin, language }) {
+  const t = translations[language] || translations.de;
   const [email, setEmail] = useState("admin@mqtt-tls.thumm-lb.de");
   const [password, setPassword] = useState("ChangeMeNow123!");
   const [error, setError] = useState("");
@@ -97,7 +202,7 @@ function Login({ onLogin }) {
           <span className="brand-mark"><Bolt size={24} /></span>
           <div>
             <h1>MQTT TLS</h1>
-            <p>Dashboard fuer Eltako ZGW Messdaten</p>
+            <p>{t.dashboardSubtitle}</p>
           </div>
         </div>
         <form onSubmit={submit} className="form">
@@ -120,7 +225,8 @@ function Login({ onLogin }) {
   );
 }
 
-function Dashboard({ session, onLogout }) {
+function Dashboard({ session, onLogout, language, onLanguageChange }) {
+  const t = translations[language] || translations.de;
   const { token, user } = session;
   const [users, setUsers] = useState([]);
   const [devices, setDevices] = useState([]);
@@ -243,7 +349,7 @@ function Dashboard({ session, onLogout }) {
     const metrics = Array.from(new Set(readings.map((reading) => reading.metric)));
     return selectedChartMetrics.length
       ? selectedChartMetrics.filter((metric) => metrics.includes(metric))
-      : metrics.slice(0, 6);
+      : defaultChartMetrics.filter((metric) => metrics.includes(metric));
   }, [readings, selectedChartMetrics]);
 
   const availableChartMetrics = useMemo(() => {
@@ -251,13 +357,13 @@ function Dashboard({ session, onLogout }) {
       ...Object.keys(latestByMetric),
       ...readings.map((reading) => reading.metric)
     ]);
-    return Array.from(metrics).sort((a, b) => humanMetric(a).localeCompare(humanMetric(b)));
-  }, [latestByMetric, readings]);
+    return Array.from(metrics).sort((a, b) => humanMetric(a, t).localeCompare(humanMetric(b, t)));
+  }, [latestByMetric, readings, t]);
 
   function exportChartCsv() {
     const csv = buildChartCsv(chartData, chartMetrics);
     if (!csv) {
-      setMessage("Keine Daten fuer den Export vorhanden.");
+      setMessage(t.noExportData);
       return;
     }
     const filename = [
@@ -296,7 +402,7 @@ function Dashboard({ session, onLogout }) {
         </nav>
         <button className="ghost-button logout" onClick={onLogout}>
           <LogOut size={18} />
-          Abmelden
+          {t.logout}
         </button>
       </aside>
 
@@ -304,17 +410,23 @@ function Dashboard({ session, onLogout }) {
         <header className="topbar">
           <div>
             <p className="eyebrow">Live Monitoring</p>
-            <h2>{selectedDevice?.name || "Noch kein Geraet angelegt"}</h2>
+            <h2>{selectedDevice?.name || t.noDevice}</h2>
           </div>
           <div className="topbar-status">
             <div className="status-pill">
               <Activity size={18} />
-              {selectedDevice?.last_seen_at ? `Zuletzt ${formatDate(selectedDevice.last_seen_at)}` : "Wartet auf Daten"}
+              {selectedDevice?.last_seen_at ? `${t.lastSeen} ${formatDate(selectedDevice.last_seen_at)}` : t.waiting}
             </div>
             <div className={liveConnected ? "status-pill live-pill" : "status-pill live-pill offline"}>
               <Activity size={18} />
-              {liveConnected ? "Live verbunden" : "Live getrennt"}
+              {liveConnected ? t.liveConnected : t.liveDisconnected}
             </div>
+            <label className="language-select">
+              <select value={language} onChange={(event) => onLanguageChange(event.target.value)}>
+                <option value="de">Deutsch</option>
+                <option value="en">English</option>
+              </select>
+            </label>
           </div>
         </header>
 
@@ -324,12 +436,12 @@ function Dashboard({ session, onLogout }) {
           <MetricTile icon={<Gauge />} label="Power L1" row={latestByMetric.L1_active_power} />
           <MetricTile icon={<Gauge />} label="Power L2" row={latestByMetric.L2_active_power} />
           <MetricTile icon={<Gauge />} label="Power L3" row={latestByMetric.L3_active_power} />
-          <MetricTile icon={<Bolt />} label="Gesamtleistung" row={latestByMetric.Total_active_power} />
-          <MetricTile icon={<Clock3 />} label="Bezug total" row={latestByMetric.Total_imported_active_energy} />
-          <MetricTile icon={<Clock3 />} label="Einspeisung total" row={latestByMetric.Total_exported_active_energy} />
+          <MetricTile icon={<Bolt />} label={t.totalPower} row={latestByMetric.Total_active_power} />
+          <MetricTile icon={<Clock3 />} label={t.importedTotal} row={latestByMetric.Total_imported_active_energy} />
+          <MetricTile icon={<Clock3 />} label={t.exportedTotal} row={latestByMetric.Total_exported_active_energy} />
         </section>
 
-        <MetricOverview latestByMetric={latestByMetric} />
+        <MetricOverview latestByMetric={latestByMetric} t={t} />
 
         <section className="chart-section">
           <div className="section-heading">
@@ -339,7 +451,7 @@ function Dashboard({ session, onLogout }) {
             </div>
             <div className="chart-controls">
               <label>
-                Von
+                {t.from}
                 <input
                   type="datetime-local"
                   value={historyRange.start}
@@ -347,7 +459,7 @@ function Dashboard({ session, onLogout }) {
                 />
               </label>
               <label>
-                Bis
+                {t.to}
                 <input
                   type="datetime-local"
                   value={historyRange.end}
@@ -365,12 +477,13 @@ function Dashboard({ session, onLogout }) {
                   setHistoryRange((current) => ({ ...current, end: toLocalDateTimeValue(new Date()) }));
                 }}
               >
-                Bis jetzt
+                {t.untilNow}
               </button>
               <ChartMetricSelect
                 metrics={availableChartMetrics}
                 selectedMetrics={selectedChartMetrics}
                 onChange={setSelectedChartMetrics}
+                t={t}
               />
               <button
                 className="export-button"
@@ -430,9 +543,10 @@ function Dashboard({ session, onLogout }) {
             users={users}
             devices={devices}
             onChanged={() => load().catch((err) => setMessage(err.message))}
+            t={t}
           />
         )}
-        {!isAdmin && <ClaimDevice token={token} onChanged={() => load().catch((err) => setMessage(err.message))} />}
+        {!isAdmin && <ClaimDevice token={token} onChanged={() => load().catch((err) => setMessage(err.message))} t={t} />}
       </section>
     </main>
   );
@@ -449,7 +563,7 @@ function MetricTile({ icon, label, row }) {
   );
 }
 
-function ChartMetricSelect({ metrics, selectedMetrics, onChange }) {
+function ChartMetricSelect({ metrics, selectedMetrics, onChange, t }) {
   function toggle(metric) {
     onChange(selectedMetrics.includes(metric)
       ? selectedMetrics.filter((item) => item !== metric)
@@ -461,10 +575,10 @@ function ChartMetricSelect({ metrics, selectedMetrics, onChange }) {
   }
 
   const label = selectedMetrics.length === 0
-    ? "Standardauswahl"
+    ? t.powerDefault
     : selectedMetrics.length === 1
-      ? humanMetric(selectedMetrics[0])
-      : `${selectedMetrics.length} Metriken`;
+      ? humanMetric(selectedMetrics[0], t)
+      : `${selectedMetrics.length} ${t.metricsCount}`;
 
   return (
     <details className="multi-select">
@@ -479,7 +593,7 @@ function ChartMetricSelect({ metrics, selectedMetrics, onChange }) {
               {group.label}
             </button>
           ))}
-          <button type="button" onClick={() => onChange([])}>Standard</button>
+          <button type="button" onClick={() => onChange([])}>{t.powerDefault}</button>
         </div>
         <div className="metric-options">
           {metrics.map((metric) => (
@@ -489,7 +603,7 @@ function ChartMetricSelect({ metrics, selectedMetrics, onChange }) {
                 checked={selectedMetrics.includes(metric)}
                 onChange={() => toggle(metric)}
               />
-              <span>{humanMetric(metric)}</span>
+              <span>{humanMetric(metric, t)}</span>
             </label>
           ))}
         </div>
@@ -498,16 +612,17 @@ function ChartMetricSelect({ metrics, selectedMetrics, onChange }) {
   );
 }
 
-function MetricOverview({ latestByMetric }) {
+function MetricOverview({ latestByMetric, t }) {
   const rows = Object.values(latestByMetric);
-  const visibleMetrics = new Set(metricSections.flatMap((section) => section.metrics.map((metric) => metric.key)));
+  const sections = metricSections(t);
+  const visibleMetrics = new Set(sections.flatMap((section) => section.metrics.map((metric) => metric.key)));
   const otherRows = rows
     .filter((row) => !visibleMetrics.has(row.metric))
     .sort((a, b) => a.metric.localeCompare(b.metric));
 
   return (
     <section className="metric-overview">
-      {metricSections.map((section) => (
+      {sections.map((section) => (
         <MetricGroup key={section.title} title={section.title} rows={section.metrics.map((metric) => ({
           ...metric,
           row: latestByMetric[metric.key]
@@ -516,7 +631,7 @@ function MetricOverview({ latestByMetric }) {
       {otherRows.length > 0 && (
         <MetricGroup
           title="Weitere Werte"
-          rows={otherRows.map((row) => ({ key: row.metric, label: humanMetric(row.metric), row }))}
+          rows={otherRows.map((row) => ({ key: row.metric, label: humanMetric(row.metric, t), row }))}
         />
       )}
     </section>
@@ -554,12 +669,12 @@ function normalizeUnit(unit) {
   return unit === "Watt" ? "W" : unit;
 }
 
-function humanMetric(metric) {
+function humanMetric(metric, t = translations.de) {
   const labels = {
-    Total_imported_active_energy: "Imported Total Energy",
-    Total_exported_active_energy: "Exported Total Energy",
-    Resettable_total_imported_active_energy: "Resettable Imported Energy",
-    Resettable_total_exported_active_energy: "Resettable Exported Energy"
+    Total_imported_active_energy: t.importedTotal,
+    Total_exported_active_energy: t.exportedTotal,
+    Resettable_total_imported_active_energy: t.resettableImport,
+    Resettable_total_exported_active_energy: t.resettableExport
   };
   if (labels[metric]) return labels[metric];
   return metric
@@ -568,7 +683,7 @@ function humanMetric(metric) {
     .replace(/\bFW\b/g, "Firmware");
 }
 
-function AdminPanel({ token, users, devices, onChanged }) {
+function AdminPanel({ token, users, devices, onChanged, t }) {
   const [userForm, setUserForm] = useState({ name: "", email: "", password: "", role: "user" });
   const [editingUser, setEditingUser] = useState(null);
   const [maintenanceForm, setMaintenanceForm] = useState({ olderThanDays: 90, device_id: "", wipeAll: false });
@@ -653,11 +768,11 @@ function AdminPanel({ token, users, devices, onChanged }) {
       ? new Date().toISOString()
       : new Date(Date.now() - days * 24 * 60 * 60 * 1000).toISOString();
     const scope = maintenanceForm.device_id
-      ? devices.find((device) => device.id === maintenanceForm.device_id)?.name || "dieses Geraet"
-      : "alle Geraete";
+      ? devices.find((device) => device.id === maintenanceForm.device_id)?.name || t.thisDevice
+      : t.allDevicesScope;
     const confirmText = maintenanceForm.wipeAll
-      ? `Komplette History fuer ${scope} wirklich loeschen?`
-      : `History-Daten fuer ${scope} loeschen, die aelter als ${days} Tage sind?`;
+      ? fillTemplate(t.confirmWipe, { scope })
+      : fillTemplate(t.confirmDeleteOlder, { scope, days });
     if (!window.confirm(confirmText)) return;
 
     try {
@@ -670,8 +785,8 @@ function AdminPanel({ token, users, devices, onChanged }) {
         })
       });
       setMaintenanceMessage(maintenanceForm.wipeAll
-        ? "Komplette History wurde geloescht."
-        : `History-Daten vor ${formatDate(before)} wurden geloescht.`);
+        ? t.completeHistoryDeleted
+        : fillTemplate(t.historyDeletedBefore, { date: formatDate(before) }));
       onChanged();
     } catch (err) {
       setError(err.message);
@@ -684,7 +799,7 @@ function AdminPanel({ token, users, devices, onChanged }) {
         <div className="section-heading">
           <div>
             <p className="eyebrow">Admin</p>
-            <h3>User erstellen</h3>
+            <h3>{t.userCreate}</h3>
           </div>
           <Users size={22} />
         </div>
@@ -720,7 +835,7 @@ function AdminPanel({ token, users, devices, onChanged }) {
               <small>{row.email} · {row.role}</small>
               <div className="row-actions">
                 <button className="edit-button" title="Bearbeiten" onClick={() => setEditingUser({ ...row, password: "" })}><Pencil size={16} /></button>
-                <button title="Loeschen" onClick={() => remove(`/users/${row.id}`)}><Trash2 size={16} /></button>
+                <button title={t.delete} onClick={() => remove(`/users/${row.id}`)}><Trash2 size={16} /></button>
               </div>
             </>
           )
@@ -731,13 +846,13 @@ function AdminPanel({ token, users, devices, onChanged }) {
         <div className="section-heading">
           <div>
             <p className="eyebrow">ZGW</p>
-            <h3>Geraet registrieren</h3>
+            <h3>{t.deviceRegister}</h3>
           </div>
           <Server size={22} />
         </div>
         <form className="form inline-form" onSubmit={createDevice}>
           <select value={deviceForm.user_id} onChange={(event) => setDeviceForm({ ...deviceForm, user_id: event.target.value })}>
-            <option value="">User waehlen</option>
+            <option value="">{t.chooseUser}</option>
             {users.map((user) => <option key={user.id} value={user.id}>{user.name}</option>)}
           </select>
           <input placeholder="Name" value={deviceForm.name} onChange={(event) => setDeviceForm({ ...deviceForm, name: event.target.value })} />
@@ -778,7 +893,7 @@ function AdminPanel({ token, users, devices, onChanged }) {
               <small>{row.mqtt_topic || `${row.client_id}/devices/${row.serial_number}`} · History {row.history_sample_interval_seconds || 60}s · MQTT {row.mqtt_username} · {row.user_email}</small>
               <div className="row-actions">
                 <button className="edit-button" title="Bearbeiten" onClick={() => setEditingDevice({ ...row, mqtt_password: "" })}><Pencil size={16} /></button>
-                <button title="Loeschen" onClick={() => remove(`/devices/${row.id}`)}><Trash2 size={16} /></button>
+                <button title={t.delete} onClick={() => remove(`/devices/${row.id}`)}><Trash2 size={16} /></button>
               </div>
             </>
           )
@@ -788,14 +903,14 @@ function AdminPanel({ token, users, devices, onChanged }) {
       <div className="admin-panel maintenance-panel">
         <div className="section-heading">
           <div>
-            <p className="eyebrow">Wartung</p>
-            <h3>History bereinigen</h3>
+            <p className="eyebrow">{t.maintenance}</p>
+            <h3>{t.cleanupHistory}</h3>
           </div>
           <Trash2 size={22} />
         </div>
         <form className="form inline-form" onSubmit={deleteOldHistory}>
           <label>
-            Aelter als Tage
+            {t.olderThanDays}
             <input
               type="number"
               min="1"
@@ -805,12 +920,12 @@ function AdminPanel({ token, users, devices, onChanged }) {
             />
           </label>
           <label>
-            Geraet
+            {t.device}
             <select
               value={maintenanceForm.device_id}
               onChange={(event) => setMaintenanceForm({ ...maintenanceForm, device_id: event.target.value })}
             >
-              <option value="">Alle Geraete</option>
+              <option value="">{t.allDevices}</option>
               {devices.map((device) => <option key={device.id} value={device.id}>{device.name}</option>)}
             </select>
           </label>
@@ -820,11 +935,11 @@ function AdminPanel({ token, users, devices, onChanged }) {
               checked={maintenanceForm.wipeAll}
               onChange={(event) => setMaintenanceForm({ ...maintenanceForm, wipeAll: event.target.checked })}
             />
-            Komplette History loeschen
+            {t.wipeHistory}
           </label>
           <button className="danger-button">
             <Trash2 size={18} />
-            {maintenanceForm.wipeAll ? "Komplette History loeschen" : "Alte History loeschen"}
+            {maintenanceForm.wipeAll ? t.wipeHistory : t.deleteOldHistory}
           </button>
         </form>
         {maintenanceMessage && <p className="notice">{maintenanceMessage}</p>}
@@ -833,7 +948,7 @@ function AdminPanel({ token, users, devices, onChanged }) {
   );
 }
 
-function ClaimDevice({ token, onChanged }) {
+function ClaimDevice({ token, onChanged, t }) {
   const [form, setForm] = useState({
     name: "Mein Eltako ZGW",
     client_id: "ZGW16-IP",
@@ -852,7 +967,7 @@ function ClaimDevice({ token, onChanged }) {
     setMessage("");
     try {
       await request("/devices/claim", token, { method: "POST", body: JSON.stringify(form) });
-      setMessage("Geraet wurde zugewiesen.");
+      setMessage(t.deviceAssigned);
       onChanged();
     } catch (err) {
       setMessage(err.message);
@@ -864,7 +979,7 @@ function ClaimDevice({ token, onChanged }) {
       <div className="section-heading">
         <div>
           <p className="eyebrow">ZGW</p>
-          <h3>Geraet selbst zuweisen</h3>
+          <h3>{t.claimDevice}</h3>
         </div>
         <Server size={22} />
       </div>
@@ -1003,9 +1118,10 @@ function historyRangeLabel(range) {
 }
 const palette = ["#0f8b8d", "#ff6b35", "#2f52e0", "#7a5cfa", "#179a55", "#d1495b"];
 
-const metricSections = [
+function metricSections(t) {
+  return [
   {
-    title: "Spannung",
+    title: t.voltage,
     metrics: [
       { key: "Voltage_of_L1_to_N", label: "L1 gegen N" },
       { key: "Voltage_of_L2_to_N", label: "L2 gegen N" },
@@ -1013,7 +1129,7 @@ const metricSections = [
     ]
   },
   {
-    title: "Strom",
+    title: t.current,
     metrics: [
       { key: "L1_Current", label: "L1 Strom" },
       { key: "L2_Current", label: "L2 Strom" },
@@ -1021,7 +1137,7 @@ const metricSections = [
     ]
   },
   {
-    title: "Leistung",
+    title: t.power,
     metrics: [
       { key: "L1_active_power", label: "L1 Wirkleistung" },
       { key: "L2_active_power", label: "L2 Wirkleistung" },
@@ -1039,27 +1155,32 @@ const metricSections = [
     ]
   },
   {
-    title: "Energie",
+    title: t.energy,
     metrics: [
       { key: "Total_imported_active_energy", label: "Imported Total Energy" },
       { key: "Total_exported_active_energy", label: "Exported Total Energy" },
-      { key: "Resettable_total_imported_active_energy", label: "Bezug resettable" },
-      { key: "Resettable_total_exported_active_energy", label: "Einspeisung resettable" }
+      { key: "Resettable_total_imported_active_energy", label: t.resettableImport },
+      { key: "Resettable_total_exported_active_energy", label: t.resettableExport }
     ]
   },
   {
-    title: "Geraetedaten",
+    title: t.deviceData,
     metrics: [
       { key: "Modbus_address", label: "Modbus Adresse" },
       { key: "Serial_number", label: "Seriennummer" },
       { key: "Manufacturing_code", label: "Manufacturing Code" },
-      { key: "Meter_type", label: "Zaehler Typ" },
+      { key: "Meter_type", label: t.meterType },
       { key: "FW_version", label: "Firmware Version" }
     ]
   }
-];
+  ];
+}
 
 const chartQuickGroups = [
+  {
+    label: "Power L1-L3",
+    metrics: defaultChartMetrics
+  },
   {
     label: "Spannung L1-L3",
     metrics: ["Voltage_of_L1_to_N", "Voltage_of_L2_to_N", "Voltage_of_L3_to_N"]
@@ -1067,10 +1188,6 @@ const chartQuickGroups = [
   {
     label: "Strom L1-L3",
     metrics: ["L1_Current", "L2_Current", "L3_Current"]
-  },
-  {
-    label: "Power L1-L3",
-    metrics: ["L1_active_power", "L2_active_power", "L3_active_power"]
   },
   {
     label: "Imported/Exported Energy",

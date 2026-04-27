@@ -41,7 +41,7 @@ router.get("/live", async (req, res) => {
       removeClient();
     });
   } catch {
-    res.status(401).json({ error: "Session ungueltig" });
+    res.status(401).json({ error: "Session ungültig" });
   }
 });
 
@@ -55,7 +55,7 @@ router.get("/users", requireAuth, requireAdmin, async (req, res) => {
 router.post("/users", requireAuth, requireAdmin, async (req, res) => {
   const { email, name, password, role = "user" } = req.body || {};
   if (!email || !name || !password) return res.status(400).json({ error: "E-Mail, Name und Passwort sind Pflicht" });
-  if (!["admin", "user"].includes(role)) return res.status(400).json({ error: "Ungueltige Rolle" });
+  if (!["admin", "user"].includes(role)) return res.status(400).json({ error: "Ungültige Rolle" });
 
   const hash = await bcrypt.hash(password, 12);
   const result = await pool.query(
@@ -69,8 +69,8 @@ router.post("/users", requireAuth, requireAdmin, async (req, res) => {
 
 router.patch("/users/:id", requireAuth, requireAdmin, async (req, res) => {
   const { email, name, password, role } = req.body || {};
-  if (role && !["admin", "user"].includes(role)) return res.status(400).json({ error: "Ungueltige Rolle" });
-  if (!email && !name && !password && !role) return res.status(400).json({ error: "Keine Aenderung angegeben" });
+  if (role && !["admin", "user"].includes(role)) return res.status(400).json({ error: "Ungültige Rolle" });
+  if (!email && !name && !password && !role) return res.status(400).json({ error: "Keine Änderung angegeben" });
 
   const current = await pool.query("select * from users where id = $1", [req.params.id]);
   if (current.rowCount === 0) return res.status(404).json({ error: "User nicht gefunden" });
@@ -100,7 +100,7 @@ router.patch("/users/:id", requireAuth, requireAdmin, async (req, res) => {
 });
 
 router.delete("/users/:id", requireAuth, requireAdmin, async (req, res) => {
-  if (req.params.id === req.user.id) return res.status(400).json({ error: "Eigenen Admin nicht loeschen" });
+  if (req.params.id === req.user.id) return res.status(400).json({ error: "Eigenen Admin nicht löschen" });
   await pool.query("delete from users where id = $1", [req.params.id]);
   res.status(204).end();
 });
@@ -166,7 +166,7 @@ router.patch("/devices/:id", requireAuth, requireAdmin, async (req, res) => {
     model
   } = req.body || {};
   const current = await pool.query("select * from devices where id = $1", [req.params.id]);
-  if (current.rowCount === 0) return res.status(404).json({ error: "Geraet nicht gefunden" });
+  if (current.rowCount === 0) return res.status(404).json({ error: "Gerät nicht gefunden" });
 
   const nextUsername = mqtt_username || current.rows[0].mqtt_username;
   const usernameTaken = await pool.query(
@@ -253,7 +253,7 @@ router.post("/devices/claim", requireAuth, async (req, res) => {
     "select id from devices where client_id = $1 and serial_number = $2",
     [client_id, serial_number]
   );
-  if (existing.rowCount > 0) return res.status(409).json({ error: "Dieses Geraet ist bereits registriert" });
+  if (existing.rowCount > 0) return res.status(409).json({ error: "Dieses Gerät ist bereits registriert" });
 
   const result = await pool.query(
     `insert into devices (user_id, name, client_id, serial_number, mqtt_username, mqtt_topic, history_sample_interval_seconds, manufacturer, model)
@@ -283,11 +283,11 @@ router.delete("/devices/:id", requireAuth, requireAdmin, async (req, res) => {
 router.delete("/maintenance/history", requireAuth, requireAdmin, async (req, res) => {
   const { before, device_id, all = false } = req.body || {};
   const cutoff = all ? new Date(Date.now() + 1000).toISOString() : parseDateQuery(before);
-  if (!cutoff) return res.status(400).json({ error: "Gueltiges Datum fuer 'before' ist Pflicht" });
+  if (!cutoff) return res.status(400).json({ error: "Gültiges Datum für 'before' ist Pflicht" });
 
   if (device_id) {
     const device = await pool.query("select id from devices where id = $1", [device_id]);
-    if (device.rowCount === 0) return res.status(404).json({ error: "Geraet nicht gefunden" });
+    if (device.rowCount === 0) return res.status(404).json({ error: "Gerät nicht gefunden" });
   }
 
   await deleteReadings({ before: cutoff, deviceId: device_id || null });
@@ -312,7 +312,7 @@ router.delete("/maintenance/history", requireAuth, requireAdmin, async (req, res
 
 router.get("/devices/:id/metrics", requireAuth, async (req, res) => {
   const device = await visibleDevice(req.params.id, req.user);
-  if (!device) return res.status(404).json({ error: "Geraet nicht gefunden" });
+  if (!device) return res.status(404).json({ error: "Gerät nicht gefunden" });
 
   const result = await pool.query(
     `select metric, unit, created_at as last_seen_at
@@ -326,14 +326,14 @@ router.get("/devices/:id/metrics", requireAuth, async (req, res) => {
 
 router.get("/devices/:id/readings", requireAuth, async (req, res) => {
   const device = await visibleDevice(req.params.id, req.user);
-  if (!device) return res.status(404).json({ error: "Geraet nicht gefunden" });
+  if (!device) return res.status(404).json({ error: "Gerät nicht gefunden" });
 
   const metric = req.query.metric;
   const hours = Math.min(Number(req.query.hours || 24), 24 * 365);
   const start = parseDateQuery(req.query.start);
   const end = parseDateQuery(req.query.end);
-  if (req.query.start && !start) return res.status(400).json({ error: "Startdatum ist ungueltig" });
-  if (req.query.end && !end) return res.status(400).json({ error: "Enddatum ist ungueltig" });
+  if (req.query.start && !start) return res.status(400).json({ error: "Startdatum ist ungültig" });
+  if (req.query.end && !end) return res.status(400).json({ error: "Enddatum ist ungültig" });
   const params = [req.params.id, hours];
   let metricFilter = "";
   if (metric) {
