@@ -229,6 +229,19 @@ h3 {
   color: #3b4a55;
 }
 
+.live-pill {
+  color: #0b6f72;
+  background: #e4f4f2;
+  border-color: #cfe6e4;
+  font-weight: 900;
+}
+
+.live-pill.offline {
+  color: #a02d3f;
+  background: #fae9ec;
+  border-color: #f0cbd1;
+}
+
 .topbar-status {
   display: flex;
   align-items: center;

@@ -131,6 +131,7 @@ function Dashboard({ session, onLogout }) {
   const [historyRange, setHistoryRange] = useState(() => defaultHistoryRange());
   const [historyEndsNow, setHistoryEndsNow] = useState(true);
   const [message, setMessage] = useState("");
+  const [liveConnected, setLiveConnected] = useState(false);
 
   const selectedDevice = devices.find((device) => device.id === selectedDeviceId) || devices[0];
   const isAdmin = user.role === "admin";
@@ -184,23 +185,55 @@ function Dashboard({ session, onLogout }) {
   }, [selectedDevice?.id, token, historyRange.start, historyRange.end, historyEndsNow]);
 
   useEffect(() => {
-    const proto = location.protocol === "https:" ? "wss" : "ws";
-    const ws = new WebSocket(`${proto}://${location.host}/ws/live`);
-    ws.onmessage = (event) => {
-      const data = JSON.parse(event.data);
-      if (data.type !== "reading") return;
-      setSummary((current) => updateSummary(current, data));
-      setDevices((current) => current.map((device) => (
-        device.id === data.reading.device_id
-          ? { ...device, last_seen_at: data.reading.created_at }
-          : device
-      )));
-      if (data.reading.device_id === selectedDeviceId) {
-        setReadings((current) => [...current.slice(-400), data.reading]);
-      }
+    let ws;
+    let reconnectTimer;
+    let closedByEffect = false;
+
+    function connectLiveSocket() {
+      const proto = location.protocol === "https:" ? "wss" : "ws";
+      ws = new WebSocket(`${proto}://${location.host}/ws/live`);
+      ws.onopen = () => {
+        setLiveConnected(true);
+        setMessage("");
+      };
+      ws.onmessage = (event) => {
+        const data = JSON.parse(event.data);
+        if (data.type !== "reading") return;
+        setSummary((current) => updateSummary(current, data));
+        setDevices((current) => current.map((device) => (
+          device.id === data.reading.device_id
+            ? { ...device, last_seen_at: data.reading.created_at }
+            : device
+        )));
+        setReadings((current) => {
+          const activeDeviceId = selectedDeviceId || selectedDevice?.id;
+          return data.reading.device_id === activeDeviceId
+            ? [...current.slice(-400), data.reading]
+            : current;
+        });
+      };
+      ws.onerror = () => setLiveConnected(false);
+      ws.onclose = () => {
+        setLiveConnected(false);
+        if (!closedByEffect) reconnectTimer = window.setTimeout(connectLiveSocket, 2000);
+      };
+    }
+
+    connectLiveSocket();
+    return () => {
+      closedByEffect = true;
+      window.clearTimeout(reconnectTimer);
+      if (ws) ws.close();
     };
-    return () => ws.close();
-  }, [selectedDeviceId]);
+  }, [selectedDevice?.id, selectedDeviceId]);
+
+  useEffect(() => {
+    if (liveConnected) return undefined;
+    const interval = window.setInterval(() => {
+      load().catch((err) => setMessage(err.message));
+    }, defaultRefreshSeconds * 1000);
+    return () => window.clearInterval(interval);
+  }, [liveConnected, load]);
 
   const latestByMetric = useMemo(() => {
     const rows = summary.filter((row) => row.device_id === selectedDevice?.id && row.metric);
@@ -291,6 +324,10 @@ function Dashboard({ session, onLogout }) {
             <div className="status-pill">
               <Activity size={18} />
               {selectedDevice?.last_seen_at ? `Zuletzt ${formatDate(selectedDevice.last_seen_at)}` : "Wartet auf Daten"}
+            </div>
+            <div className={liveConnected ? "status-pill live-pill" : "status-pill live-pill offline"}>
+              <Activity size={18} />
+              {liveConnected ? "Live verbunden" : "Live getrennt"}
             </div>
           </div>
         </header>
