@@ -577,6 +577,8 @@ function humanMetric(metric) {
 function AdminPanel({ token, users, devices, onChanged }) {
   const [userForm, setUserForm] = useState({ name: "", email: "", password: "", role: "user" });
   const [editingUser, setEditingUser] = useState(null);
+  const [maintenanceForm, setMaintenanceForm] = useState({ olderThanDays: 90, device_id: "" });
+  const [maintenanceMessage, setMaintenanceMessage] = useState("");
   const [deviceForm, setDeviceForm] = useState({
     user_id: "",
     name: "Einspeisepunkt",
@@ -642,6 +644,32 @@ function AdminPanel({ token, users, devices, onChanged }) {
       if (!body.mqtt_password) delete body.mqtt_password;
       await request(`/devices/${editingDevice.id}`, token, { method: "PATCH", body: JSON.stringify(body) });
       setEditingDevice(null);
+      onChanged();
+    } catch (err) {
+      setError(err.message);
+    }
+  }
+
+  async function deleteOldHistory(event) {
+    event.preventDefault();
+    setError("");
+    setMaintenanceMessage("");
+    const days = Math.max(Number(maintenanceForm.olderThanDays) || 1, 1);
+    const before = new Date(Date.now() - days * 24 * 60 * 60 * 1000).toISOString();
+    const scope = maintenanceForm.device_id
+      ? devices.find((device) => device.id === maintenanceForm.device_id)?.name || "dieses Geraet"
+      : "alle Geraete";
+    if (!window.confirm(`History-Daten fuer ${scope} loeschen, die aelter als ${days} Tage sind?`)) return;
+
+    try {
+      await request("/maintenance/history", token, {
+        method: "DELETE",
+        body: JSON.stringify({
+          before,
+          device_id: maintenanceForm.device_id || null
+        })
+      });
+      setMaintenanceMessage(`History-Daten vor ${formatDate(before)} wurden geloescht.`);
       onChanged();
     } catch (err) {
       setError(err.message);
@@ -753,6 +781,39 @@ function AdminPanel({ token, users, devices, onChanged }) {
             </>
           )
         )} />
+      </div>
+
+      <div className="admin-panel maintenance-panel">
+        <div className="section-heading">
+          <div>
+            <p className="eyebrow">Wartung</p>
+            <h3>History bereinigen</h3>
+          </div>
+          <Trash2 size={22} />
+        </div>
+        <form className="form inline-form" onSubmit={deleteOldHistory}>
+          <label>
+            Aelter als Tage
+            <input
+              type="number"
+              min="1"
+              value={maintenanceForm.olderThanDays}
+              onChange={(event) => setMaintenanceForm({ ...maintenanceForm, olderThanDays: event.target.value })}
+            />
+          </label>
+          <label>
+            Geraet
+            <select
+              value={maintenanceForm.device_id}
+              onChange={(event) => setMaintenanceForm({ ...maintenanceForm, device_id: event.target.value })}
+            >
+              <option value="">Alle Geraete</option>
+              {devices.map((device) => <option key={device.id} value={device.id}>{device.name}</option>)}
+            </select>
+          </label>
+          <button className="danger-button"><Trash2 size={18} /> Alte History loeschen</button>
+        </form>
+        {maintenanceMessage && <p className="notice">{maintenanceMessage}</p>}
       </div>
     </section>
   );

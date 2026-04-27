@@ -100,7 +100,8 @@ select {
 }
 
 .primary-button,
-.ghost-button {
+.ghost-button,
+.danger-button {
   min-height: 42px;
   border-radius: 6px;
   display: inline-flex;
@@ -121,6 +122,12 @@ select {
   background: #eef4f5;
   color: #243541;
   padding: 0 14px;
+}
+
+.danger-button {
+  background: #a02d3f;
+  color: #ffffff;
+  padding: 0 16px;
 }
 
 .error,
@@ -534,6 +541,14 @@ h3 {
   grid-column: span 2;
 }
 
+.inline-form .danger-button {
+  grid-column: span 2;
+}
+
+.maintenance-panel {
+  grid-column: 1 / -1;
+}
+
 .list {
   display: grid;
   gap: 8px;
@@ -687,7 +702,8 @@ h3 {
     grid-template-columns: 1fr;
   }
 
-  .inline-form .primary-button {
+  .inline-form .primary-button,
+  .inline-form .danger-button {
     grid-column: auto;
   }
 

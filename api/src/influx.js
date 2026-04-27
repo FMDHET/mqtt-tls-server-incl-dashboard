@@ -78,6 +78,36 @@ export async function queryLatest({ userId, isAdmin }) {
   return rows;
 }
 
+export async function deleteReadings({ before, deviceId }) {
+  const stop = new Date(before);
+  if (Number.isNaN(stop.getTime())) throw new Error("Ungueltiges Enddatum fuer Influx-Loeschung");
+
+  const predicates = ['_measurement="mqtt_reading"'];
+  if (deviceId) predicates.push(`device_id="${escapePredicate(deviceId)}"`);
+
+  const response = await fetch(`${url}/api/v2/delete?org=${encodeURIComponent(org)}&bucket=${encodeURIComponent(bucket)}`, {
+    method: "POST",
+    headers: {
+      Authorization: `Token ${token}`,
+      "Content-Type": "application/json"
+    },
+    body: JSON.stringify({
+      start: "1970-01-01T00:00:00Z",
+      stop: stop.toISOString(),
+      predicate: predicates.join(" AND ")
+    })
+  });
+
+  if (!response.ok) {
+    const message = await response.text().catch(() => response.statusText);
+    throw new Error(`Influx-Loeschung fehlgeschlagen: ${message || response.statusText}`);
+  }
+}
+
 function escapeFlux(value) {
+  return String(value).replaceAll("\\", "\\\\").replaceAll('"', '\\"');
+}
+
+function escapePredicate(value) {
   return String(value).replaceAll("\\", "\\\\").replaceAll('"', '\\"');
 }

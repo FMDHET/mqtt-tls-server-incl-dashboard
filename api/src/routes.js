@@ -3,7 +3,7 @@ import crypto from "crypto";
 import express from "express";
 import { pool } from "./db.js";
 import { requireAdmin, requireAuth, signToken } from "./auth.js";
-import { queryLatest, queryReadings } from "./influx.js";
+import { deleteReadings, queryLatest, queryReadings } from "./influx.js";
 
 export const router = express.Router();
 
@@ -257,6 +257,34 @@ router.post("/devices/claim", requireAuth, async (req, res) => {
 router.delete("/devices/:id", requireAuth, requireAdmin, async (req, res) => {
   await pool.query("delete from devices where id = $1", [req.params.id]);
   res.status(204).end();
+});
+
+router.delete("/maintenance/history", requireAuth, requireAdmin, async (req, res) => {
+  const { before, device_id } = req.body || {};
+  const cutoff = parseDateQuery(before);
+  if (!cutoff) return res.status(400).json({ error: "Gueltiges Datum fuer 'before' ist Pflicht" });
+
+  if (device_id) {
+    const device = await pool.query("select id from devices where id = $1", [device_id]);
+    if (device.rowCount === 0) return res.status(404).json({ error: "Geraet nicht gefunden" });
+  }
+
+  await deleteReadings({ before: cutoff, deviceId: device_id || null });
+
+  const params = [cutoff];
+  let deviceFilter = "";
+  if (device_id) {
+    params.push(device_id);
+    deviceFilter = " and device_id = $2";
+  }
+  const deleted = await pool.query(`delete from readings where created_at < $1${deviceFilter}`, params);
+
+  res.json({
+    ok: true,
+    postgres_deleted: deleted.rowCount,
+    before: cutoff,
+    device_id: device_id || null
+  });
 });
 
 router.get("/devices/:id/metrics", requireAuth, async (req, res) => {
