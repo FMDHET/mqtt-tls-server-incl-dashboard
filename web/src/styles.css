@@ -428,11 +428,12 @@ h3 {
 }
 
 .chart-controls {
-  display: flex;
-  align-items: center;
+  display: grid;
+  grid-template-columns: minmax(180px, 1fr) minmax(180px, 1fr) 84px minmax(210px, 1fr) 132px;
+  align-items: end;
   justify-content: flex-end;
   gap: 10px;
-  width: min(760px, 100%);
+  width: min(980px, 100%);
 }
 
 .chart-controls label {
@@ -444,12 +445,14 @@ h3 {
 }
 
 .chart-controls input {
-  width: 190px;
+  width: 100%;
+  height: 42px;
   min-height: 42px;
 }
 
 .toggle-button {
-  align-self: end;
+  width: 100%;
+  height: 42px;
   min-height: 42px;
   border: 1px solid #cbd8dd;
   border-radius: 6px;
@@ -466,7 +469,8 @@ h3 {
 }
 
 .export-button {
-  align-self: end;
+  width: 100%;
+  height: 42px;
   min-height: 42px;
   border: 0;
   border-radius: 6px;
@@ -487,10 +491,11 @@ h3 {
 
 .multi-select {
   position: relative;
-  width: min(360px, 100%);
+  width: 100%;
 }
 
 .multi-select summary {
+  height: 42px;
   min-height: 42px;
   border: 1px solid #cbd8dd;
   border-radius: 6px;
@@ -740,7 +745,7 @@ h3 {
   .chart-controls {
     width: 100%;
     align-items: stretch;
-    flex-direction: column;
+    grid-template-columns: 1fr;
   }
 
   .chart-controls input {

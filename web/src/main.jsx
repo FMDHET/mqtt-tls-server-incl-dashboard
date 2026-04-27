@@ -610,14 +610,22 @@ function ChartTooltip({ active, payload, label, units, t }) {
 }
 
 function ChartMetricSelect({ metrics, selectedMetrics, onChange, t }) {
+  const detailsRef = useRef(null);
+
+  function closeMenu() {
+    if (detailsRef.current) detailsRef.current.open = false;
+  }
+
   function toggle(metric) {
     onChange(selectedMetrics.includes(metric)
       ? selectedMetrics.filter((item) => item !== metric)
       : [...selectedMetrics, metric]);
+    closeMenu();
   }
 
   function selectGroup(groupMetrics) {
     onChange(groupMetrics.filter((metric) => metrics.includes(metric)));
+    closeMenu();
   }
 
   const label = selectedMetrics.length === 0
@@ -627,7 +635,7 @@ function ChartMetricSelect({ metrics, selectedMetrics, onChange, t }) {
       : `${selectedMetrics.length} ${t.metricsCount}`;
 
   return (
-    <details className="multi-select">
+    <details className="multi-select" ref={detailsRef}>
       <summary>
         <span>{label}</span>
         <ChevronDown size={18} />
@@ -639,7 +647,10 @@ function ChartMetricSelect({ metrics, selectedMetrics, onChange, t }) {
               {group.label}
             </button>
           ))}
-          <button type="button" onClick={() => onChange([])}>{t.powerDefault}</button>
+          <button type="button" onClick={() => {
+            onChange([]);
+            closeMenu();
+          }}>{t.powerDefault}</button>
         </div>
         <div className="metric-options">
           {metrics.map((metric) => (
