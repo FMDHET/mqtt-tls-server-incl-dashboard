@@ -1,4 +1,4 @@
-import React, { useCallback, useEffect, useMemo, useState } from "react";
+import React, { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { createRoot } from "react-dom/client";
 import {
   Activity,
@@ -238,6 +238,7 @@ function Dashboard({ session, onLogout, language, onLanguageChange }) {
   const [historyEndsNow, setHistoryEndsNow] = useState(true);
   const [message, setMessage] = useState("");
   const [liveConnected, setLiveConnected] = useState(false);
+  const readingsSignatureRef = useRef("");
 
   const selectedDevice = devices.find((device) => device.id === selectedDeviceId) || devices[0];
   const isAdmin = user.role === "admin";
@@ -274,8 +275,12 @@ function Dashboard({ session, onLogout, language, onLanguageChange }) {
         });
         const data = await request(`/devices/${selectedDevice.id}/readings?${params.toString()}`, token);
         if (active) {
+          const lastReading = data.readings.at(-1);
+          const nextSignature = `${data.readings.length}:${lastReading?.created_at || ""}:${lastReading?.metric || ""}:${lastReading?.value || ""}`;
+          const hasNewHistory = readingsSignatureRef.current !== nextSignature;
+          readingsSignatureRef.current = nextSignature;
           setReadings(data.readings);
-          if (historyEndsNow) setHistoryRange((current) => ({ ...current, end: effectiveEnd }));
+          if (historyEndsNow && hasNewHistory) setHistoryRange((current) => ({ ...current, end: effectiveEnd }));
         }
       } catch (err) {
         if (active) setMessage(err.message);
@@ -338,6 +343,14 @@ function Dashboard({ session, onLogout, language, onLanguageChange }) {
     }
     return Array.from(grouped.values()).sort((a, b) => a.timestamp - b.timestamp);
   }, [readings]);
+
+  const chartDomain = useMemo(() => {
+    const start = new Date(historyRange.start).getTime();
+    const end = new Date(historyRange.end).getTime();
+    return Number.isFinite(start) && Number.isFinite(end) && start < end
+      ? [start, end]
+      : ["dataMin", "dataMax"];
+  }, [historyRange.start, historyRange.end]);
 
   const chartMetrics = useMemo(() => {
     const metrics = Array.from(new Set(readings.map((reading) => reading.metric)));
@@ -506,7 +519,7 @@ function Dashboard({ session, onLogout, language, onLanguageChange }) {
                   dataKey="timestamp"
                   type="number"
                   scale="time"
-                  domain={["dataMin", "dataMax"]}
+                  domain={chartDomain}
                   tickFormatter={(value) => formatChartTick(value, historyRange)}
                   tick={{ fill: "#60717d", fontSize: 12 }}
                   minTickGap={28}
@@ -524,6 +537,8 @@ function Dashboard({ session, onLogout, language, onLanguageChange }) {
                     fill={`url(#grad-${index})`}
                     strokeWidth={2}
                     connectNulls
+                    isAnimationActive={false}
+                    dot={false}
                   />
                 ))}
               </AreaChart>
