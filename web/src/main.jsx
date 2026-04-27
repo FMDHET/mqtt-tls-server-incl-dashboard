@@ -305,19 +305,13 @@ function Dashboard({ session, onLogout, language, onLanguageChange }) {
           ? { ...device, last_seen_at: data.reading.created_at }
           : device
       )));
-      setReadings((current) => {
-        const activeDeviceId = selectedDeviceId || selectedDevice?.id;
-        return data.reading.device_id === activeDeviceId
-          ? [...current.slice(-400), data.reading]
-          : current;
-      });
     });
     source.onerror = () => setLiveConnected(false);
     return () => {
       source.close();
       setLiveConnected(false);
     };
-  }, [selectedDevice?.id, selectedDeviceId, token]);
+  }, [token]);
 
   useEffect(() => {
     if (liveConnected) return undefined;
