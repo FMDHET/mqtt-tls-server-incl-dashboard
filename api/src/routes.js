@@ -103,17 +103,29 @@ router.get("/devices", requireAuth, async (req, res) => {
 });
 
 router.post("/devices", requireAuth, requireAdmin, async (req, res) => {
-  const { user_id, name, client_id, serial_number, mqtt_topic, manufacturer, model, mqtt_username, mqtt_password } = req.body || {};
+  const {
+    user_id,
+    name,
+    client_id,
+    serial_number,
+    mqtt_topic,
+    history_sample_interval_seconds,
+    manufacturer,
+    model,
+    mqtt_username,
+    mqtt_password
+  } = req.body || {};
   if (!user_id || !name || !client_id || !serial_number || !mqtt_password) {
     return res.status(400).json({ error: "User, Name, Client-ID, Serialnumber und MQTT-Passwort sind Pflicht" });
   }
   const username = mqtt_username || `${client_id}_${serial_number}`;
   const topic = mqtt_topic || defaultDeviceTopic(client_id, serial_number);
+  const historyInterval = normalizeHistoryInterval(history_sample_interval_seconds);
   const result = await pool.query(
-    `insert into devices (user_id, name, client_id, serial_number, mqtt_username, mqtt_topic, manufacturer, model)
-     values ($1, $2, $3, $4, $5, $6, $7, $8)
+    `insert into devices (user_id, name, client_id, serial_number, mqtt_username, mqtt_topic, history_sample_interval_seconds, manufacturer, model)
+     values ($1, $2, $3, $4, $5, $6, $7, $8, $9)
      returning *`,
-    [user_id, name, client_id, serial_number, username, topic, manufacturer || null, model || null]
+    [user_id, name, client_id, serial_number, username, topic, historyInterval, manufacturer || null, model || null]
   );
   await upsertMqttCredential(username, mqtt_password, result.rows[0].id);
   res.status(201).json({ device: result.rows[0] });
@@ -126,6 +138,7 @@ router.patch("/devices/:id", requireAuth, requireAdmin, async (req, res) => {
     client_id,
     serial_number,
     mqtt_topic,
+    history_sample_interval_seconds,
     mqtt_username,
     mqtt_password,
     manufacturer,
@@ -143,6 +156,9 @@ router.patch("/devices/:id", requireAuth, requireAdmin, async (req, res) => {
   if (current.rows[0].mqtt_username !== nextUsername && !mqtt_password) {
     return res.status(400).json({ error: "Beim Aendern des MQTT-Users ist ein neues MQTT-Passwort erforderlich" });
   }
+  const historyInterval = history_sample_interval_seconds == null
+    ? null
+    : normalizeHistoryInterval(history_sample_interval_seconds);
 
   const client = await pool.connect();
   try {
@@ -155,8 +171,9 @@ router.patch("/devices/:id", requireAuth, requireAdmin, async (req, res) => {
            serial_number = coalesce($5, serial_number),
            mqtt_username = coalesce($6, mqtt_username),
            mqtt_topic = coalesce($7, mqtt_topic),
-           manufacturer = coalesce($8, manufacturer),
-           model = coalesce($9, model)
+           history_sample_interval_seconds = coalesce($8, history_sample_interval_seconds),
+           manufacturer = coalesce($9, manufacturer),
+           model = coalesce($10, model)
        where id = $1
        returning *`,
       [
@@ -167,6 +184,7 @@ router.patch("/devices/:id", requireAuth, requireAdmin, async (req, res) => {
         serial_number || null,
         nextUsername,
         mqtt_topic || null,
+        historyInterval,
         manufacturer || null,
         model || null
       ]
@@ -196,6 +214,7 @@ router.post("/devices/claim", requireAuth, async (req, res) => {
     mqtt_password,
     name,
     mqtt_topic,
+    history_sample_interval_seconds,
     manufacturer,
     model
   } = req.body || {};
@@ -216,8 +235,8 @@ router.post("/devices/claim", requireAuth, async (req, res) => {
   if (existing.rowCount > 0) return res.status(409).json({ error: "Dieses Geraet ist bereits registriert" });
 
   const result = await pool.query(
-    `insert into devices (user_id, name, client_id, serial_number, mqtt_username, mqtt_topic, manufacturer, model)
-     values ($1, $2, $3, $4, $5, $6, $7, $8)
+    `insert into devices (user_id, name, client_id, serial_number, mqtt_username, mqtt_topic, history_sample_interval_seconds, manufacturer, model)
+     values ($1, $2, $3, $4, $5, $6, $7, $8, $9)
      returning *`,
     [
       req.user.id,
@@ -226,6 +245,7 @@ router.post("/devices/claim", requireAuth, async (req, res) => {
       serial_number,
       mqtt_username,
       mqtt_topic || defaultDeviceTopic(client_id, serial_number),
+      normalizeHistoryInterval(history_sample_interval_seconds),
       manufacturer || "Eltako",
       model || "ZGW"
     ]
@@ -334,6 +354,12 @@ function parseDateQuery(value) {
 
 function defaultDeviceTopic(clientId, serialNumber) {
   return `${clientId}/devices/${serialNumber}`;
+}
+
+function normalizeHistoryInterval(value) {
+  const interval = Number(value);
+  if (!Number.isFinite(interval)) return 60;
+  return Math.min(Math.max(Math.round(interval), 1), 86400);
 }
 
 async function upsertMqttCredential(username, password, deviceId, db = pool) {

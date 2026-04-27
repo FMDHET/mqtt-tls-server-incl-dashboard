@@ -585,6 +585,7 @@ function AdminPanel({ token, users, devices, onChanged }) {
     mqtt_username: "zgw16-ip-1",
     mqtt_password: "",
     mqtt_topic: "ZGW16-IP/devices/1",
+    history_sample_interval_seconds: 60,
     manufacturer: "Eltako",
     model: "DSZ15DZMOD"
   });
@@ -713,6 +714,7 @@ function AdminPanel({ token, users, devices, onChanged }) {
           <input placeholder="Client-ID" value={deviceForm.client_id} onChange={(event) => setDeviceForm({ ...deviceForm, client_id: event.target.value })} />
           <input placeholder="Serialnumber" value={deviceForm.serial_number} onChange={(event) => setDeviceForm({ ...deviceForm, serial_number: event.target.value })} />
           <input placeholder="MQTT-Topic" value={deviceForm.mqtt_topic} onChange={(event) => setDeviceForm({ ...deviceForm, mqtt_topic: event.target.value })} />
+          <input placeholder="History-Intervall (Sek.)" type="number" min="1" value={deviceForm.history_sample_interval_seconds} onChange={(event) => setDeviceForm({ ...deviceForm, history_sample_interval_seconds: event.target.value })} />
           <input placeholder="MQTT-User" value={deviceForm.mqtt_username} onChange={(event) => setDeviceForm({ ...deviceForm, mqtt_username: event.target.value })} />
           <input placeholder="MQTT-Passwort" type="password" value={deviceForm.mqtt_password} onChange={(event) => setDeviceForm({ ...deviceForm, mqtt_password: event.target.value })} />
           <input placeholder="Hersteller" value={deviceForm.manufacturer} onChange={(event) => setDeviceForm({ ...deviceForm, manufacturer: event.target.value })} />
@@ -730,6 +732,7 @@ function AdminPanel({ token, users, devices, onChanged }) {
               <input value={editingDevice.client_id} onChange={(event) => setEditingDevice({ ...editingDevice, client_id: event.target.value })} />
               <input value={editingDevice.serial_number} onChange={(event) => setEditingDevice({ ...editingDevice, serial_number: event.target.value })} />
               <input value={editingDevice.mqtt_topic || ""} onChange={(event) => setEditingDevice({ ...editingDevice, mqtt_topic: event.target.value })} />
+              <input type="number" min="1" value={editingDevice.history_sample_interval_seconds || 60} onChange={(event) => setEditingDevice({ ...editingDevice, history_sample_interval_seconds: event.target.value })} />
               <input value={editingDevice.mqtt_username} onChange={(event) => setEditingDevice({ ...editingDevice, mqtt_username: event.target.value })} />
               <input placeholder="Neues MQTT-Passwort optional" type="password" value={editingDevice.mqtt_password} onChange={(event) => setEditingDevice({ ...editingDevice, mqtt_password: event.target.value })} />
               <input value={editingDevice.manufacturer || ""} onChange={(event) => setEditingDevice({ ...editingDevice, manufacturer: event.target.value })} />
@@ -742,7 +745,7 @@ function AdminPanel({ token, users, devices, onChanged }) {
           ) : (
             <>
               <span>{row.name}</span>
-              <small>{row.mqtt_topic || `${row.client_id}/devices/${row.serial_number}`} · MQTT {row.mqtt_username} · {row.user_email}</small>
+              <small>{row.mqtt_topic || `${row.client_id}/devices/${row.serial_number}`} · History {row.history_sample_interval_seconds || 60}s · MQTT {row.mqtt_username} · {row.user_email}</small>
               <div className="row-actions">
                 <button className="edit-button" title="Bearbeiten" onClick={() => setEditingDevice({ ...row, mqtt_password: "" })}><Pencil size={16} /></button>
                 <button title="Loeschen" onClick={() => remove(`/devices/${row.id}`)}><Trash2 size={16} /></button>
@@ -763,6 +766,7 @@ function ClaimDevice({ token, onChanged }) {
     mqtt_username: "",
     mqtt_password: "",
     mqtt_topic: "ZGW16-IP/devices/1",
+    history_sample_interval_seconds: 60,
     manufacturer: "Eltako",
     model: "DSZ15DZMOD"
   });
@@ -794,6 +798,7 @@ function ClaimDevice({ token, onChanged }) {
         <input placeholder="Client-ID" value={form.client_id} onChange={(event) => setForm({ ...form, client_id: event.target.value })} />
         <input placeholder="Serialnumber" value={form.serial_number} onChange={(event) => setForm({ ...form, serial_number: event.target.value })} />
         <input placeholder="MQTT-Topic" value={form.mqtt_topic} onChange={(event) => setForm({ ...form, mqtt_topic: event.target.value })} />
+        <input placeholder="History-Intervall (Sek.)" type="number" min="1" value={form.history_sample_interval_seconds} onChange={(event) => setForm({ ...form, history_sample_interval_seconds: event.target.value })} />
         <input placeholder="MQTT-User" value={form.mqtt_username} onChange={(event) => setForm({ ...form, mqtt_username: event.target.value })} />
         <input placeholder="MQTT-Passwort" type="password" value={form.mqtt_password} onChange={(event) => setForm({ ...form, mqtt_password: event.target.value })} />
         <input placeholder="Hersteller" value={form.manufacturer} onChange={(event) => setForm({ ...form, manufacturer: event.target.value })} />

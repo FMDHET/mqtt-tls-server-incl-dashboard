@@ -25,6 +25,7 @@ export async function migrate() {
       serial_number text not null,
       mqtt_username text not null unique,
       mqtt_topic text,
+      history_sample_interval_seconds integer not null default 60,
       manufacturer text,
       model text,
       last_seen_at timestamptz,
@@ -34,9 +35,13 @@ export async function migrate() {
 
     alter table devices add column if not exists mqtt_username text;
     alter table devices add column if not exists mqtt_topic text;
+    alter table devices add column if not exists history_sample_interval_seconds integer not null default 60;
     update devices set mqtt_username = client_id || '_' || serial_number where mqtt_username is null;
     update devices set mqtt_topic = client_id || '/devices/' || serial_number where mqtt_topic is null;
+    update devices set history_sample_interval_seconds = 60 where history_sample_interval_seconds is null or history_sample_interval_seconds < 1;
     alter table devices alter column mqtt_username set not null;
+    alter table devices alter column history_sample_interval_seconds set default 60;
+    alter table devices alter column history_sample_interval_seconds set not null;
     create unique index if not exists devices_mqtt_username_idx on devices (mqtt_username);
 
     create table if not exists mqtt_credentials (
@@ -76,6 +81,13 @@ export async function migrate() {
 
     create index if not exists readings_device_metric_created_idx
       on readings (device_id, metric, created_at desc);
+
+    create table if not exists history_write_state (
+      device_id uuid not null references devices(id) on delete cascade,
+      metric text not null,
+      last_written_at timestamptz not null,
+      primary key (device_id, metric)
+    );
 
     create table if not exists latest_readings (
       device_id uuid not null references devices(id) on delete cascade,

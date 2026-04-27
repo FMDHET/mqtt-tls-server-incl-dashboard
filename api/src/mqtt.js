@@ -93,7 +93,7 @@ async function storeReading(topic, payload) {
   if (!Number.isFinite(value)) return;
 
   const deviceResult = await pool.query(
-    `select d.id, d.name, d.user_id, d.client_id, d.serial_number, mc.unit
+    `select d.id, d.name, d.user_id, d.client_id, d.serial_number, d.history_sample_interval_seconds, mc.unit
      from devices d
      left join metric_configs mc on mc.device_id = d.id and mc.state_topic = $3
      where d.serial_number = $2
@@ -126,7 +126,10 @@ async function storeReading(topic, payload) {
     raw_payload: payload,
     created_at: createdAt
   };
-  await writeReading({ device, metric: parsed.metric, value, unit: reading.unit, payload });
+  if (await shouldWriteHistory(device.id, parsed.metric, reading.created_at, device.history_sample_interval_seconds)) {
+    await writeReading({ device, metric: parsed.metric, value, unit: reading.unit, payload });
+    await markHistoryWritten(device.id, parsed.metric, reading.created_at);
+  }
   await pool.query(
     `insert into latest_readings (device_id, metric, value, unit, raw_payload, created_at)
      values ($1, $2, $3, $4, $5, $6)
@@ -144,6 +147,29 @@ async function storeReading(topic, payload) {
     reading,
     device: { id: device.id, name: device.name, user_id: device.user_id }
   });
+}
+
+async function shouldWriteHistory(deviceId, metric, createdAt, intervalSeconds) {
+  const interval = Math.max(Number(intervalSeconds) || 60, 1);
+  const result = await pool.query(
+    "select last_written_at from history_write_state where device_id = $1 and metric = $2",
+    [deviceId, metric]
+  );
+  if (result.rowCount === 0) return true;
+
+  const nextAt = new Date(createdAt).getTime();
+  const lastAt = new Date(result.rows[0].last_written_at).getTime();
+  return Number.isFinite(nextAt) && Number.isFinite(lastAt) && nextAt - lastAt >= interval * 1000;
+}
+
+async function markHistoryWritten(deviceId, metric, createdAt) {
+  await pool.query(
+    `insert into history_write_state (device_id, metric, last_written_at)
+     values ($1, $2, $3)
+     on conflict (device_id, metric) do update set
+      last_written_at = excluded.last_written_at`,
+    [deviceId, metric, createdAt]
+  );
 }
 
 export function startMqttIngestion() {
