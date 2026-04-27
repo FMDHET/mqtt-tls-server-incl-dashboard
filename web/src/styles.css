@@ -378,6 +378,55 @@ h3 {
   margin-top: 18px;
 }
 
+.chart-tooltip {
+  min-width: 220px;
+  max-width: 320px;
+  border: 1px solid #dce7ea;
+  border-radius: 8px;
+  background: rgba(255, 255, 255, 0.96);
+  box-shadow: 0 12px 34px rgba(20, 33, 43, 0.14);
+  padding: 10px 12px;
+  display: grid;
+  gap: 8px;
+}
+
+.chart-tooltip strong {
+  font-size: 0.86rem;
+}
+
+.chart-tooltip > span {
+  color: #60717d;
+  font-weight: 800;
+}
+
+.chart-tooltip-row {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) auto;
+  align-items: center;
+  gap: 14px;
+  color: #3b4a55;
+  font-weight: 800;
+}
+
+.chart-tooltip-row span {
+  min-width: 0;
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  overflow-wrap: anywhere;
+}
+
+.chart-tooltip-row i {
+  width: 9px;
+  height: 9px;
+  border-radius: 999px;
+  flex: 0 0 auto;
+}
+
+.chart-tooltip-row b {
+  color: #14212b;
+}
+
 .chart-controls {
   display: flex;
   align-items: center;

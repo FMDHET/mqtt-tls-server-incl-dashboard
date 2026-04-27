@@ -76,6 +76,7 @@ const translations = {
     to: "Bis",
     untilNow: "Bis jetzt",
     metricsCount: "Metriken",
+    noChartValue: "Keine Werte",
     resettableImport: "Bezug resettable",
     resettableExport: "Einspeisung resettable",
     powerDefault: "Power L1-L3"
@@ -121,6 +122,7 @@ const translations = {
     to: "To",
     untilNow: "Until now",
     metricsCount: "Metrics",
+    noChartValue: "No values",
     resettableImport: "Resettable import",
     resettableExport: "Resettable export",
     powerDefault: "Power L1-L3"
@@ -341,7 +343,15 @@ function Dashboard({ session, onLogout, language, onLanguageChange }) {
         [reading.metric]: Number(reading.value.toFixed(2))
       });
     }
-    return Array.from(grouped.values()).sort((a, b) => a.timestamp - b.timestamp);
+    const lastValues = {};
+    return Array.from(grouped.values())
+      .sort((a, b) => a.timestamp - b.timestamp)
+      .map((row) => {
+        for (const [key, value] of Object.entries(row)) {
+          if (key !== "timestamp") lastValues[key] = value;
+        }
+        return { timestamp: row.timestamp, ...lastValues };
+      });
   }, [readings]);
 
   const chartDomain = useMemo(() => {
@@ -366,6 +376,10 @@ function Dashboard({ session, onLogout, language, onLanguageChange }) {
     ]);
     return Array.from(metrics).sort((a, b) => humanMetric(a, t).localeCompare(humanMetric(b, t)));
   }, [latestByMetric, readings, t]);
+
+  const chartUnits = useMemo(() => {
+    return Object.fromEntries(Object.entries(latestByMetric).map(([metric, row]) => [metric, row.unit || ""]));
+  }, [latestByMetric]);
 
   function exportChartCsv() {
     const csv = buildChartCsv(chartData, chartMetrics);
@@ -526,12 +540,12 @@ function Dashboard({ session, onLogout, language, onLanguageChange }) {
                   interval="preserveStartEnd"
                 />
                 <YAxis tick={{ fill: "#60717d", fontSize: 12 }} />
-                <Tooltip labelFormatter={(value) => formatChartTooltipLabel(value)} />
+                <Tooltip content={<ChartTooltip units={chartUnits} t={t} />} />
                 <Legend />
                 {chartMetrics.map((metric, index) => (
                   <Area
                     key={metric}
-                    type="monotone"
+                    type="linear"
                     dataKey={metric}
                     stroke={palette[index % palette.length]}
                     fill={`url(#grad-${index})`}
@@ -569,6 +583,29 @@ function MetricTile({ icon, label, row }) {
       <strong>{row ? formatMetricValue(row) : "--"}</strong>
       <span>{row ? formatDate(row.created_at) : "keine Daten"}</span>
     </article>
+  );
+}
+
+function ChartTooltip({ active, payload, label, units, t }) {
+  if (!active || !payload?.length) return null;
+  const rows = payload.filter((entry) => entry.value !== null && entry.value !== undefined);
+  return (
+    <div className="chart-tooltip">
+      <strong>{formatChartTooltipLabel(label)}</strong>
+      {rows.length === 0 ? (
+        <span>{t.noChartValue}</span>
+      ) : (
+        rows.map((entry) => (
+          <div className="chart-tooltip-row" key={entry.dataKey}>
+            <span>
+              <i style={{ background: entry.color }} />
+              {humanMetric(entry.dataKey, t)}
+            </span>
+            <b>{formatChartValue(entry.value, units[entry.dataKey])}</b>
+          </div>
+        ))
+      )}
+    </div>
   );
 }
 
@@ -672,6 +709,14 @@ function formatMetricValue(row) {
     maximumFractionDigits: Math.abs(value) >= 100 ? 1 : 3
   }) : String(row.value);
   return `${formatted}${row.unit ? ` ${normalizeUnit(row.unit)}` : ""}`;
+}
+
+function formatChartValue(value, unit) {
+  const number = Number(value);
+  const formatted = Number.isFinite(number) ? number.toLocaleString("de-DE", {
+    maximumFractionDigits: Math.abs(number) >= 100 ? 1 : 3
+  }) : String(value);
+  return `${formatted}${unit ? ` ${normalizeUnit(unit)}` : ""}`;
 }
 
 function normalizeUnit(unit) {
