@@ -185,47 +185,33 @@ function Dashboard({ session, onLogout }) {
   }, [selectedDevice?.id, token, historyRange.start, historyRange.end, historyEndsNow]);
 
   useEffect(() => {
-    let ws;
-    let reconnectTimer;
-    let closedByEffect = false;
-
-    function connectLiveSocket() {
-      const proto = location.protocol === "https:" ? "wss" : "ws";
-      ws = new WebSocket(`${proto}://${location.host}/ws/live`);
-      ws.onopen = () => {
-        setLiveConnected(true);
-        setMessage("");
-      };
-      ws.onmessage = (event) => {
-        const data = JSON.parse(event.data);
-        if (data.type !== "reading") return;
-        setSummary((current) => updateSummary(current, data));
-        setDevices((current) => current.map((device) => (
-          device.id === data.reading.device_id
-            ? { ...device, last_seen_at: data.reading.created_at }
-            : device
-        )));
-        setReadings((current) => {
-          const activeDeviceId = selectedDeviceId || selectedDevice?.id;
-          return data.reading.device_id === activeDeviceId
-            ? [...current.slice(-400), data.reading]
-            : current;
-        });
-      };
-      ws.onerror = () => setLiveConnected(false);
-      ws.onclose = () => {
-        setLiveConnected(false);
-        if (!closedByEffect) reconnectTimer = window.setTimeout(connectLiveSocket, 2000);
-      };
-    }
-
-    connectLiveSocket();
+    const source = new EventSource(`${apiBase}/live?token=${encodeURIComponent(token)}`);
+    source.addEventListener("connected", () => {
+      setLiveConnected(true);
+      setMessage("");
+    });
+    source.addEventListener("reading", (event) => {
+      const data = JSON.parse(event.data);
+      if (data.type !== "reading") return;
+      setSummary((current) => updateSummary(current, data));
+      setDevices((current) => current.map((device) => (
+        device.id === data.reading.device_id
+          ? { ...device, last_seen_at: data.reading.created_at }
+          : device
+      )));
+      setReadings((current) => {
+        const activeDeviceId = selectedDeviceId || selectedDevice?.id;
+        return data.reading.device_id === activeDeviceId
+          ? [...current.slice(-400), data.reading]
+          : current;
+      });
+    });
+    source.onerror = () => setLiveConnected(false);
     return () => {
-      closedByEffect = true;
-      window.clearTimeout(reconnectTimer);
-      if (ws) ws.close();
+      source.close();
+      setLiveConnected(false);
     };
-  }, [selectedDevice?.id, selectedDeviceId]);
+  }, [selectedDevice?.id, selectedDeviceId, token]);
 
   useEffect(() => {
     if (liveConnected) return undefined;

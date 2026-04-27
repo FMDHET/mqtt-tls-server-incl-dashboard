@@ -51,17 +51,21 @@ export async function requireAuth(req, res, next) {
   if (!token) return res.status(401).json({ error: "Nicht angemeldet" });
 
   try {
-    const payload = jwt.verify(token, jwtSecret);
-    const result = await pool.query(
-      "select id, email, name, role, created_at from users where id = $1",
-      [payload.sub]
-    );
-    if (result.rowCount === 0) return res.status(401).json({ error: "User nicht gefunden" });
-    req.user = result.rows[0];
+    req.user = await userFromToken(token);
     next();
   } catch {
     res.status(401).json({ error: "Session ungueltig" });
   }
+}
+
+export async function userFromToken(token) {
+  const payload = jwt.verify(token, jwtSecret);
+  const result = await pool.query(
+    "select id, email, name, role, created_at from users where id = $1",
+    [payload.sub]
+  );
+  if (result.rowCount === 0) throw new Error("User nicht gefunden");
+  return result.rows[0];
 }
 
 export function requireAdmin(req, res, next) {

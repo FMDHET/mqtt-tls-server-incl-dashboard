@@ -2,8 +2,9 @@ import bcrypt from "bcryptjs";
 import crypto from "crypto";
 import express from "express";
 import { pool } from "./db.js";
-import { requireAdmin, requireAuth, signToken } from "./auth.js";
+import { requireAdmin, requireAuth, signToken, userFromToken } from "./auth.js";
 import { deleteReadings, queryLatest, queryReadings } from "./influx.js";
+import { addLiveClient } from "./mqtt.js";
 
 export const router = express.Router();
 
@@ -23,6 +24,26 @@ router.post("/auth/login", async (req, res) => {
 });
 
 router.get("/me", requireAuth, (req, res) => res.json({ user: req.user }));
+
+router.get("/live", async (req, res) => {
+  try {
+    const user = await userFromToken(String(req.query.token || ""));
+    res.writeHead(200, {
+      "Content-Type": "text/event-stream",
+      "Cache-Control": "no-cache, no-transform",
+      Connection: "keep-alive",
+      "X-Accel-Buffering": "no"
+    });
+    const removeClient = addLiveClient(res, user);
+    const heartbeat = setInterval(() => res.write(": keepalive\n\n"), 25000);
+    req.on("close", () => {
+      clearInterval(heartbeat);
+      removeClient();
+    });
+  } catch {
+    res.status(401).json({ error: "Session ungueltig" });
+  }
+});
 
 router.get("/users", requireAuth, requireAdmin, async (req, res) => {
   const users = await pool.query(

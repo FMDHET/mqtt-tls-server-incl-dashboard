@@ -4,16 +4,31 @@ import { pool } from "./db.js";
 import { writeReading } from "./influx.js";
 
 let wss;
+const liveClients = new Set();
 
 export function attachLiveServer(server) {
   wss = new WebSocketServer({ server, path: "/ws/live" });
 }
 
+export function addLiveClient(res, user) {
+  const client = { res, user };
+  liveClients.add(client);
+  res.write("event: connected\n");
+  res.write(`data: ${JSON.stringify({ ok: true })}\n\n`);
+  return () => liveClients.delete(client);
+}
+
 function broadcast(event) {
-  if (!wss) return;
   const data = JSON.stringify(event);
-  for (const client of wss.clients) {
-    if (client.readyState === 1) client.send(data);
+  if (wss) {
+    for (const client of wss.clients) {
+      if (client.readyState === 1) client.send(data);
+    }
+  }
+  for (const client of liveClients) {
+    if (client.user.role !== "admin" && client.user.id !== event.device.user_id) continue;
+    client.res.write("event: reading\n");
+    client.res.write(`data: ${data}\n\n`);
   }
 }
 
