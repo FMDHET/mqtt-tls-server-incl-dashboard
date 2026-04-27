@@ -260,8 +260,8 @@ router.delete("/devices/:id", requireAuth, requireAdmin, async (req, res) => {
 });
 
 router.delete("/maintenance/history", requireAuth, requireAdmin, async (req, res) => {
-  const { before, device_id } = req.body || {};
-  const cutoff = parseDateQuery(before);
+  const { before, device_id, all = false } = req.body || {};
+  const cutoff = all ? new Date(Date.now() + 1000).toISOString() : parseDateQuery(before);
   if (!cutoff) return res.status(400).json({ error: "Gueltiges Datum fuer 'before' ist Pflicht" });
 
   if (device_id) {
@@ -278,12 +278,14 @@ router.delete("/maintenance/history", requireAuth, requireAdmin, async (req, res
     deviceFilter = " and device_id = $2";
   }
   const deleted = await pool.query(`delete from readings where created_at < $1${deviceFilter}`, params);
+  await pool.query(`delete from history_write_state where last_written_at < $1${deviceFilter}`, params);
 
   res.json({
     ok: true,
     postgres_deleted: deleted.rowCount,
     before: cutoff,
-    device_id: device_id || null
+    device_id: device_id || null,
+    all: Boolean(all)
   });
 });
 

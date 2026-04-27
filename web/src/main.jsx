@@ -205,6 +205,11 @@ function Dashboard({ session, onLogout }) {
       const data = JSON.parse(event.data);
       if (data.type !== "reading") return;
       setSummary((current) => updateSummary(current, data));
+      setDevices((current) => current.map((device) => (
+        device.id === data.reading.device_id
+          ? { ...device, last_seen_at: data.reading.created_at }
+          : device
+      )));
       if (data.reading.device_id === selectedDeviceId) {
         setReadings((current) => [...current.slice(-400), data.reading]);
       }
@@ -577,7 +582,7 @@ function humanMetric(metric) {
 function AdminPanel({ token, users, devices, onChanged }) {
   const [userForm, setUserForm] = useState({ name: "", email: "", password: "", role: "user" });
   const [editingUser, setEditingUser] = useState(null);
-  const [maintenanceForm, setMaintenanceForm] = useState({ olderThanDays: 90, device_id: "" });
+  const [maintenanceForm, setMaintenanceForm] = useState({ olderThanDays: 90, device_id: "", wipeAll: false });
   const [maintenanceMessage, setMaintenanceMessage] = useState("");
   const [deviceForm, setDeviceForm] = useState({
     user_id: "",
@@ -655,21 +660,29 @@ function AdminPanel({ token, users, devices, onChanged }) {
     setError("");
     setMaintenanceMessage("");
     const days = Math.max(Number(maintenanceForm.olderThanDays) || 1, 1);
-    const before = new Date(Date.now() - days * 24 * 60 * 60 * 1000).toISOString();
+    const before = maintenanceForm.wipeAll
+      ? new Date().toISOString()
+      : new Date(Date.now() - days * 24 * 60 * 60 * 1000).toISOString();
     const scope = maintenanceForm.device_id
       ? devices.find((device) => device.id === maintenanceForm.device_id)?.name || "dieses Geraet"
       : "alle Geraete";
-    if (!window.confirm(`History-Daten fuer ${scope} loeschen, die aelter als ${days} Tage sind?`)) return;
+    const confirmText = maintenanceForm.wipeAll
+      ? `Komplette History fuer ${scope} wirklich loeschen?`
+      : `History-Daten fuer ${scope} loeschen, die aelter als ${days} Tage sind?`;
+    if (!window.confirm(confirmText)) return;
 
     try {
       await request("/maintenance/history", token, {
         method: "DELETE",
         body: JSON.stringify({
           before,
-          device_id: maintenanceForm.device_id || null
+          device_id: maintenanceForm.device_id || null,
+          all: maintenanceForm.wipeAll
         })
       });
-      setMaintenanceMessage(`History-Daten vor ${formatDate(before)} wurden geloescht.`);
+      setMaintenanceMessage(maintenanceForm.wipeAll
+        ? "Komplette History wurde geloescht."
+        : `History-Daten vor ${formatDate(before)} wurden geloescht.`);
       onChanged();
     } catch (err) {
       setError(err.message);
@@ -797,6 +810,7 @@ function AdminPanel({ token, users, devices, onChanged }) {
             <input
               type="number"
               min="1"
+              disabled={maintenanceForm.wipeAll}
               value={maintenanceForm.olderThanDays}
               onChange={(event) => setMaintenanceForm({ ...maintenanceForm, olderThanDays: event.target.value })}
             />
@@ -811,7 +825,18 @@ function AdminPanel({ token, users, devices, onChanged }) {
               {devices.map((device) => <option key={device.id} value={device.id}>{device.name}</option>)}
             </select>
           </label>
-          <button className="danger-button"><Trash2 size={18} /> Alte History loeschen</button>
+          <label className="checkbox-row">
+            <input
+              type="checkbox"
+              checked={maintenanceForm.wipeAll}
+              onChange={(event) => setMaintenanceForm({ ...maintenanceForm, wipeAll: event.target.checked })}
+            />
+            Komplette History loeschen
+          </label>
+          <button className="danger-button">
+            <Trash2 size={18} />
+            {maintenanceForm.wipeAll ? "Komplette History loeschen" : "Alte History loeschen"}
+          </button>
         </form>
         {maintenanceMessage && <p className="notice">{maintenanceMessage}</p>}
       </div>
